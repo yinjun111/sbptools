@@ -12,7 +12,7 @@ my $usage="
 
 sbptools
 version: $version
-Usage: sbptools [tool]
+Usage: sbptools [tool] [parameters]
 
 
 Parameters:
