@@ -143,8 +143,8 @@ my %configattrs;
 
 my $fileline=0;
 my $newconfigfiletitle;
-open(IN,$configfile) || die "Error opening $configfile. $!";
-open(OUT,">$newconfigfile") || die "Error opening $newconfigfile. $!";
+open(IN,$configfile) || die "Error reading $configfile. $!";
+open(OUT,">$newconfigfile") || die "Error reading $newconfigfile. $!";
 
 while(<IN>) {
 	tr/\r\n//d;
@@ -260,11 +260,11 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $fastq2=$sample2fastq{$sample}[0];
 		
 		my $fastq1trim="$samplefolder/".basename($fastq1);
-		$fastq1trim=~s/\.fastq\.gz/trimmed.fastq.gz/;
+		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
 		my $fastq2trim="$samplefolder/".basename($fastq2);
-		$fastq2trim=~s/\.fastq\.gz/trimmed.fastq.gz/;
+		$fastq2trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq2trim;
 
 		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2;";
@@ -281,7 +281,7 @@ else {
 		my $fastq1=$sample2fastq{$sample}[0];
 		
 		my $fastq1trim="$samplefolder/".basename($fastq1);
-		$fastq1trim=~s/\.fastq\.gz/trimmed.fastq.gz/;
+		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
 		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1;";
