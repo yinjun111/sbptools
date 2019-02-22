@@ -17,7 +17,7 @@ use Getopt::Long;
 ########
 
 
-my $version="0.9";
+my $version="0.91";
 
 my $usage="
 
@@ -33,9 +33,12 @@ Parameters:
     --in|-i           input file(s) separated by \",\"
     --out|-o          output file
 
+
     --case|-c         model case sensitive or not [F]
     --title|-t        files have title or not[T]
     --uniq|-u         only use unique items from model [F]
+
+    --column|-l       only retrieve specific column(s) from inputs
 	
     --verbose|-v      Verbose
 	
@@ -65,6 +68,7 @@ my $withtitle="T";
 my $verbose;
 my $unique="F";
 my $runmode="none";
+my $column;
 
 GetOptions(
 	"model|m=s" => \$modelfile,
@@ -74,6 +78,8 @@ GetOptions(
 	"case|c=s" => \$case,
 	"title|t=s" => \$withtitle,
 	"uniq|u=s" => \$unique,
+	
+	"column|l=s" => \$column,
 
 	"verbose|v" => \$verbose,
 );
@@ -203,12 +209,24 @@ if($withtitle eq "T") {
 	
 	foreach my $infile (split(",",$infiles)) {
 		my $ititle=$ititles{$infile};
+		my @ititle_array;
+		
 		if(split("\t",$ititle,-1)<$imaxcols{$infile}) {
-			$title.="\t".join("\t",$ititle,(" ") x ($imaxcols{$infile} - scalar(split("\t",$ititle,-1))));
+			#implement specific cols here
+			@ititle_array=(split("\t",$ititle,-1),(" ") x ($imaxcols{$infile} - scalar(split("\t",$ititle,-1))));
 		}
 		else {
-			$title.="\t".$ititle;
+			@ititle_array=split("\t",$ititle,-1);
 		}
+		
+		#only use defined columns		
+		if(defined $column && length($column)>0) {
+			$title.="\t".join("\t",@ititle_array[map {$_-1} split(",",$column)]);
+		}
+		else {
+			$title.="\t".join("\t",@ititle_array);
+		}
+		
 	}
 	print OUT "$title\n";
 }
@@ -241,20 +259,28 @@ while(<IN>) {
 			else {
 				$content=$_;
 			}
-					
+			
+			my @content_array;
+			
 			foreach my $infile (split(",",$infiles)) {
 				if(defined $inputs{$key}{$infile}) {
 					my $inputline=$inputs{$key}{$infile};
 					if(split("\t",$inputline,-1)<$imaxcols{$infile}) {
-						print STDERR $inputline,"#",scalar(split("\t",$inputline,-1)),"\n";
-						$content.="\t".join("\t",$inputline,(" ") x ($imaxcols{$infile} -scalar(split("\t",$inputline,-1))));
+						@content_array=(split("\t",$inputline,-1),(" ") x ($imaxcols{$infile} -scalar(split("\t",$inputline,-1))));
 					}
 					else {
-						$content.="\t".$inputline;
+						@content_array=split("\t",$inputline,-1);
 					}
 				}
 				else {
-					$content.="\t".join("\t",(" ") x $imaxcols{$infile});
+					@content_array=((" ") x $imaxcols{$infile});
+				}
+				
+				if(defined $column && length($column)>0) {
+					$content.="\t".join("\t",@content_array[map {$_-1} split(",",$column)]);
+				}
+				else {
+					$content.="\t".join("\t",@content_array);
 				}
 			}
 			
