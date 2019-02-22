@@ -23,13 +23,15 @@ my $star="/home/jyin/Programs/STAR-2.6.1c/bin/Linux_x86_64/STAR";
 ########
 
 
-my $version="0.1";
+my $version="0.1a";
 
 my $usage="
 
 rnaseq-process
 version: $version
 Usage: sbptools rnaseq-process [parameters]
+
+Description: 
 
 
 Parameters:
@@ -154,6 +156,8 @@ while(<IN>) {
 			#case sensitive match to key words, Sample, FASTQ1, FASTQ2, Index (for foldernames)
 			$configattrs{uc $array[$num]}=$num;
 		}
+		
+		#should always use first column as sample name and index to maintain continuous workflow
 		
 		#check title
 		unless(defined $configattrs{"SAMPLE"} && defined $configattrs{"FASTQ1"}) {
@@ -324,6 +328,8 @@ if(defined $configattrs{"FASTQ2"}) {
 	#PE
 	print STDERR "Printing RSEM PE script.\n\n" if $verbose;
 	print LOG "Printing RSEM PE script.\n\n";
+
+	#     rsem-calculate-expression [options] --paired-end upstream_read_file(s) downstream_read_file(s) reference_name sample_name 
 	
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
@@ -335,6 +341,8 @@ else {
 	#SE
 	print STDERR "Printing RSEM SE script.\n\n" if $verbose;
 	print LOG "Printing RSEM SE script.\n\n";
+
+	#     rsem-calculate-expression [options] upstream_read_file(s) reference_name sample_name 
 	
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
