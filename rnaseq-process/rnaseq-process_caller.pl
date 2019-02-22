@@ -23,7 +23,7 @@ my $star="/home/jyin/Programs/STAR-2.6.1c/bin/Linux_x86_64/STAR";
 ########
 
 
-my $version="0.1a";
+my $version="0.2";
 
 my $usage="
 
@@ -37,6 +37,10 @@ Description:
 Parameters:
 
     --config|-c       Configuration file
+                           first column as sample name.
+                           Controled headers include:
+                               fastq1,fastq2 columns for fastqs
+                               index for sample index used for folder names
     --output|-o       Output folder
 
     --tx|-t           Transcriptome
@@ -159,17 +163,21 @@ while(<IN>) {
 		
 		#should always use first column as sample name and index to maintain continuous workflow
 		
+		#first column as sample
+		
 		#check title
-		unless(defined $configattrs{"SAMPLE"} && defined $configattrs{"FASTQ1"}) {
+		unless(defined $configattrs{"FASTQ1"}) {
 			#SAMPLE and FASTQ1 have to be defined. The others are optional
-			print STDERR "ERROR: SAMPLE and FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
-			print LOG "ERROR: SAMPLE and FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
+			print STDERR "ERROR: FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
+			print LOG "ERROR: FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
 			exit;
 		}
 		else {
 			print STDERR "Input config $configfile includes:",join(",",map {uc $_} @array),"\n\n" if $verbose;
 			print LOG "Input config $configfile includes:",join(",",map {uc $_} @array),"\n\n";
 		}
+		
+		#version 0.2, removed self defined INDEX
 		
 		if(defined $configattrs{"INDEX"}) {
 			$newconfigfiletitle=join("\t","INDEX",map {uc $_} (splice @array,$configattrs{"INDEX"},1));
@@ -190,15 +198,18 @@ while(<IN>) {
 		my $newconfigline;
 		
 		#need to change non word chars to words
+		#if defined INDEX, use index, otherwise, use first column
 		if(defined $configattrs{"INDEX"}) {
 			$indexname=$array[$configattrs{"INDEX"}];
 		}
 		else {
-			$indexname=$array[$configattrs{"SAMPLE"}];
+			$indexname=$array[0]; #change first column as sample column in v0.2
 			$indexname=~s/[^\w-]/_/g;
 		}
 		
-		$sample2indexname{$array[$configattrs{"SAMPLE"}]}=$indexname;
+		
+		$sample2indexname{$array[0]}=$indexname;
+
 		
 		#fastq1
 		push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ1"}];
@@ -215,7 +226,7 @@ while(<IN>) {
 			$newconfigline=join("\t",$indexname,@array);
 		}
 		
-		print OUT $newconfigline,"\n";		
+		print OUT $newconfigline,"\n";
 		
 	}
 	
@@ -228,14 +239,18 @@ close OUT;
 
 #----------------
 #create folder
-print STDERR scalar(keys %sample2fastq)," samples identified from $configfile, including:\nSAMPLE\tINDEX\n",join("\n",map {$_."\t".$sample2indexname{$_}} sort keys %sample2indexname),"\n\n" if $verbose;
-print LOG scalar(keys %sample2fastq)," samples identified from $configfile, including:\nSAMPLE\tINDEX\n",join("\n",map {$_."\t".$sample2indexname{$_}} sort keys %sample2indexname),"\n\n" if $verbose;
+print STDERR scalar(keys %sample2indexname)," samples identified from $configfile, including:\nINDEX\tSAMPLE\n",join("\n",map {$sample2indexname{$_}."\t".$_} sort keys %sample2indexname),"\n\n" if $verbose;
+print LOG scalar(keys %sample2indexname)," samples identified from $configfile, including:\nINDEX\tSAMPLE\n",join("\n",map {$sample2indexname{$_}."\t".$_} sort keys %sample2indexname),"\n\n" if $verbose;
+
+#print STDERR scalar(keys %sample2fastq)," samples identified from $configfile, including:",join("\n",sort keys %sample2fastq),"\n\n" if $verbose;
+#print LOG scalar(keys %sample2fastq)," samples identified from $configfile, including:",join("\n",sort keys %sample2fastq),"\n\n";
+
 
 print STDERR "Make folders for different samples.\n\n" if $verbose;
 print LOG "Make folders for different samples.\n\n";
 
 foreach my $sample (sort keys %sample2fastq) {
-	my $samplefolder="$outputfolder/$sample";
+	my $samplefolder="$outputfolder/$sample"; #edited to enable space in folder name
 	if(!-e	$samplefolder) {
 		mkdir $samplefolder;
 	}
@@ -270,8 +285,10 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $fastq2trim="$samplefolder/".basename($fastq2);
 		$fastq2trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq2trim;
+		
+		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
 
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2;";
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
 	}
 }
 else {
@@ -279,16 +296,20 @@ else {
 	print STDERR "Printing cutadapt SE script.\n\n" if $verbose;
 	print LOG "Printing cutadapt SE script.\n\n";
 	
+	
+	
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
-	
+		
+		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
+		
 		my $fastq1=$sample2fastq{$sample}[0];
 		
 		my $fastq1trim="$samplefolder/".basename($fastq1);
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1;";
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
 	}
 }
 		
@@ -371,6 +392,11 @@ close S1;
 print STDERR "To run locally, in shell type: sh $scriptfile1\n\n";
 print LOG "To run locally, in shell type: sh $scriptfile1\n\n";
 
+
+#whether to run it instantly
+if($runmode eq "local") {
+	system("sh $scriptfile1");
+}
 
 
 close LOG;
