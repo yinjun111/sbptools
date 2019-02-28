@@ -19,7 +19,9 @@ my $basemount="/usr/local/bin/basemount";
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2 adding function to merge fastq files by R1, R2
 
 my $usage="
 
@@ -34,8 +36,11 @@ Parameters:
     --folder|-f       Basemount folder name
     --project|-p      Project name
     --sample|-s       Sample name(s) (optional)
-    --config|-c       Config file, tab delimited file Folder,Project,Sample (optional)
     --out|-o          output file
+
+    --merge|-m        Whether to merge fastq files from each folder by R1/R2 [T]
+    --config|-c       Config file, tab delimited file Folder,Project,Sample (optional)
+
 	
     --runmode|-r      Where to run the scripts, local, server or none [none]
     --verbose|-v      Verbose
@@ -62,6 +67,7 @@ my $project;
 my $sample;
 my $config;
 my $outputfolder;
+my $merge="T";
 my $runmode="none";
 
 my $verbose;
@@ -72,6 +78,7 @@ GetOptions(
 	"sample|s=s" => \$sample,	
 	"out|o=s" => \$outputfolder,
 	"config|c=s" => \$config,
+	"merge|m=s" => \$merge,
 	"runmode|r" => \$runmode,
 	
 	"verbose|v" => \$verbose,
@@ -88,6 +95,12 @@ $outputfolder = abs_path($outputfolder);
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
 }
+
+my $mergedfolder="$outputfolder/Merged";
+if($merge eq "T") {
+	mkdir($mergedfolder);
+}
+
 
 my $logfile="$outputfolder/bs-fastq_run.log";
 my $scriptfile="$outputfolder/bs-fastq_run.sh";
@@ -111,7 +124,7 @@ my %samplelist;
 
 
 if(defined $config && length($config)>0) {
-	
+	#use config file to retrieve information
 	my %attr2col;
 	my $cline=0;
 	open(IN,$config) || die "Error openning $config. $!";
@@ -222,15 +235,45 @@ foreach my $f (sort keys %samplelist) {
 			
 			my $sfolder="$f/Projects/$p/Samples/$s/Files";
 			
-			print STDERR $sfolder,"\n";
+			#print STDERR $sfolder,"\n";
 			my @fastqfiles=glob("'${sfolder}'"."/*fastq.gz"); #deal with special chars in the variable for glob
 			
 			print STDERR scalar(@fastqfiles)," FASTQ files found for Project $p, Sample $s.\n" if $verbose;
 			print LOG scalar(@fastqfiles)," FASTQ files found for Project $p, Sample $s.\n";
 			
+			my @newfastqfiles_r1;
+			my @newfastqfiles_r2;
 			foreach my $file (@fastqfiles) {
-				print OUT "cp \'$file\' \'$outputfolder/$p/$s\'\n";
+				print OUT "cp \'$file\' \'$outputfolder/$p/$s\';";
+				
+				if($merge eq "T") {
+					if($file=~/(R\d)_\d+.fastq.gz/) {
+						my $filename=basename($file);
+						if($1 eq "R1") {
+							push @newfastqfiles_r1,"\'$outputfolder/$p/$s/$filename\'";
+						}
+						elsif($1 eq "R2") {
+							push @newfastqfiles_r2,"\'$outputfolder/$p/$s/$filename\'";
+						}
+						else {
+							print STDERR "ERROR:$file doesn't conform naming convention ",'(R\d)_\d+.fastq.gz',".\n";
+						}
+					}
+					else {
+						print STDERR "ERROR:$file doesn't conform naming convention ",'(R\d)_\d+.fastq.gz',".\n";
+					}
+				}
 			}
+			
+			if($merge eq "T") {
+				#provide option to merge fastq files
+				print OUT "cat ",join(" ",@newfastqfiles_r1)," > \'$mergedfolder/$s\_R1.fastq.gz\';";
+				if(@newfastqfiles_r2) {
+					print OUT "cat ",join(" ",@newfastqfiles_r2)," > \'$mergedfolder/$s\_R2.fastq.gz\';";
+				}
+			}		
+			print OUT "\n";
+			
 		}
 	}
 }
