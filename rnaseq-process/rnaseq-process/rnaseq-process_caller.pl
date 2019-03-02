@@ -14,7 +14,7 @@ use File::Basename qw(basename);
 my $cutadapt="/home/jyin/.local/bin/cutadapt";
 my $fastqc="/apps/FastQC/fastqc";
 my $rsem="/home/jyin/Programs/RSEM-1.3.1/rsem-calculate-expression";
-my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
+my $star="/home/jyin/Programs/STAR-2.6.1c/bin/Linux_x86_64/STAR";
 
 
 
@@ -23,10 +23,7 @@ my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
 ########
 
 
-my $version="0.2b";
-
-#0.2b change ensembl to UCSC format
-
+my $version="0.2";
 
 my $usage="
 
@@ -122,8 +119,8 @@ print LOG "\n";
 #test tx option
 
 my %tx2ref=(
-	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_UCSC_STAR/Human_RSEM",
-	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_UCSC_STAR/Mouse_RSEM",
+	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_STAR/Human_RSEM",
+	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_STAR/Mouse_RSEM",
 );
 
 
