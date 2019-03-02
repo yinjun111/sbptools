@@ -138,8 +138,8 @@ my %tx2ref=(
 		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",},
 	"Mouse.B38.Ensembl84"=>{ 
-		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84",
-		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84/chrNameLength.txt",
+		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
 		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
 		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",}
@@ -434,7 +434,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample/";
 
 		#need to move to samplefolder, because star will genearte temp files 
-		$sample2workflow{$sample}.="cd $samplefolder;STAR --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
+		$sample2workflow{$sample}.="cd $samplefolder;$star --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
 	}
 }
 else {
@@ -447,7 +447,7 @@ else {
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample/";
 				
-		$sample2workflow{$sample}.="STAR --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[1]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
+		$sample2workflow{$sample}.="$star --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[1]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
 	}
 }
 
@@ -468,7 +468,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir --sspe $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
 	}
 	else {
-		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir --sspe $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
+		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
 	}
 	
 	unless(defined $inputsamples{$sample}) {
@@ -496,11 +496,11 @@ foreach my $sample (sort keys %sample2fastq) {
 			$genomeversion="mm10";
 		}
 	
-		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > outputfolder/$sample/$sample\_Peaks_Anno.txt >& $outputfolder/$sample/$sample\_annotatepeaks.log;";
+		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt >& $outputfolder/$sample/$sample\_annotatepeaks.log;";
 	}	
 	
 	#makeUCSCfile
-	$sample2workflow{$sample}.="$makeucscfile outputfolder/$sample/$sample\_TagDir -o outputfolder/$sample/$sample.bedgraph -bigWig ".$tx2ref{$tx}{"homeranno"}." > outputfolder/$sample/$sample\_trackinfo.txt;";
+	$sample2workflow{$sample}.="$makeucscfile $outputfolder/$sample/$sample\_TagDir -o $outputfolder/$sample/$sample.bw -bigWig ".$tx2ref{$tx}{"chrsize"}." > $outputfolder/$sample/$sample\_trackinfo.txt;";
 	
 }
 
