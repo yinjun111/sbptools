@@ -18,10 +18,15 @@ my $fastqc="/apps/FastQC/fastqc";
 my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
 
 #homer
-my $maketagdirectory="/home/jyin/Programs/Homer/bin/makeTagDirectory";
-my $annotatepeaks="/home/jyin/Programs/Homer/bin/annotatePeaks.pl";
-my $findpeaks="/home/jyin/Programs/Homer/bin/findPeaks";
-my $makeucscfile="/home/jyin/Programs/Homer/bin/makeUCSCfile";
+my $homer="/home/jyin/Programs/Homer/bin";
+my $maketagdirectory="$homer/makeTagDirectory";
+my $annotatepeaks="$homer/annotatePeaks.pl";
+my $findpeaks="$homer/findPeaks";
+my $makeucscfile="$homer/makeUCSCfile";
+my $pos2bed="$homer/pos2bed.pl";
+
+#UCSC
+my $bedtobigbed="/apps/ucsc/bedToBigBed";
 
 ########
 #Interface
@@ -498,6 +503,12 @@ foreach my $sample (sort keys %sample2fastq) {
 	
 		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt $genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt 2> $outputfolder/$sample/$sample\_annotatepeaks.log;";
 	}	
+	
+	#make bed file
+	$sample2workflow{$sample}.="$pos2bed $outputfolder/$sample/$sample\_Peaks.txt > $outputfolder/$sample/$sample\_Peaks.bed;";
+	
+	#bedtobigbed
+	$sample2workflow{$sample}.="cat $outputfolder/$sample/$sample\_Peaks.bed | grep -v \"#\" | sort -k1,1 -k2,2n > $outputfolder/$sample/$sample\_Peaks_sorted.bed;$bedtobigbed $outputfolder/$sample/$sample\_Peaks_sorted.bed ".$tx2ref{$tx}{"chrsize"}." $outputfolder/$sample/$sample\_Peaks_sorted.bb;";
 	
 	#makeUCSCfile
 	$sample2workflow{$sample}.="$makeucscfile $outputfolder/$sample/$sample\_TagDir -o $outputfolder/$sample/$sample.bw -bigWig ".$tx2ref{$tx}{"chrsize"}." > $outputfolder/$sample/$sample\_trackinfo.txt;";
