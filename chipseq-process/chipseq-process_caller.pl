@@ -348,7 +348,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample";
 		
 		my $fastq1=$sample2fastq{$sample}[0];
-		my $fastq2=$sample2fastq{$sample}[0];
+		my $fastq2=$sample2fastq{$sample}[1]; #
 		
 		my $fastq1trim="$samplefolder/".basename($fastq1);
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
@@ -465,7 +465,7 @@ foreach my $sample (sort keys %sample2fastq) {
 	#makeTagDirectory WT_1_TagDir -sspe WT_1/WT_1_Aligned.sortedByCoord.out.bam
 	
 	if(defined $configattrs{"FASTQ2"}) {
-		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir --sspe $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
+		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir -sspe $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
 	}
 	else {
 		$sample2workflow{$sample}.="$maketagdirectory $outputfolder/$sample/$sample\_TagDir $outputfolder/$sample/$sample\_Aligned.sortedByCoord.out.bam >& $outputfolder/$sample/$sample\_maketagdirectory.log;";
@@ -496,7 +496,7 @@ foreach my $sample (sort keys %sample2fastq) {
 			$genomeversion="mm10";
 		}
 	
-		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt >& $outputfolder/$sample/$sample\_annotatepeaks.log;";
+		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt $genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt 2> $outputfolder/$sample/$sample\_annotatepeaks.log;";
 	}	
 	
 	#makeUCSCfile
