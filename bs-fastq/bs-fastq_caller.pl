@@ -19,9 +19,10 @@ my $basemount="/usr/local/bin/basemount";
 ########
 
 
-my $version="0.2";
+my $version="0.2a";
 
 #v0.2 adding function to merge fastq files by R1, R2
+#v0.2a add basemount-cmd refresh function
 
 my $usage="
 
@@ -70,7 +71,7 @@ my $outputfolder;
 my $merge="T";
 my $runmode="none";
 
-my $verbose;
+my $verbose=1;
 
 GetOptions(
 	"folder|f=s" => \$folder,
@@ -120,6 +121,11 @@ print LOG "$basemount version:", getsysoutput("$basemount -V"),"\n";
 #Progress
 ########
 
+#refresh basemount
+
+system("cd $folder/Projects;$basemount\-cmd refresh;cd $outputfolder;");
+
+#read samples
 my %samplelist;
 
 
@@ -185,18 +191,25 @@ else {
 			
 			my $inputfolder="$folder/Projects/$project/Samples/";
 			
-			opendir my($dh), $inputfolder || die "ERROR:Couldn't open dir $inputfolder. $!";
-			my @files = readdir $dh;
-			closedir $dh;
-			
-			#find samples
-			foreach my $file (@files) {
-				if($file=~/^[^\.]/) {
-					#dont' copy hidden files
-					my $s=basename($file);
-					$samplelist{$infolder}{$project}{$s}++;
-				}
-			}	
+			if(-e $inputfolder) {
+				opendir my($dh), $inputfolder || die "ERROR:Couldn't open dir $inputfolder. $!";
+				my @files = readdir $dh;
+				closedir $dh;
+				
+				#find samples
+				foreach my $file (@files) {
+					if($file=~/^[^\.]/) {
+						#dont' copy hidden files
+						my $s=basename($file);
+						$samplelist{$infolder}{$project}{$s}++;
+					}
+				}	
+			}
+			else {
+				print STDERR "ERROR:$inputfolder doesn't exist. Your project $project may not exist.\n";
+				print LOG "ERROR:$inputfolder doesn't exist. Your project $project may not exist.\n";
+				exit;			
+			}
 		}
 	}
 	else {

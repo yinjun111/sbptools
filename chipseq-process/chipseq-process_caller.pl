@@ -33,7 +33,10 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.1";
+my $version="0.1a";
+
+#v0.1 add --atacseq for cutadapt 
+
 
 my $usage="
 
@@ -55,6 +58,7 @@ Parameters:
 
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
+    --atacseq         Trim adaptor for ATAC-Seq for Nextera instead of Truseq
 
     Parallel computating parameters
     --core            No. of cores or threads used by each task [4]
@@ -88,6 +92,7 @@ my $verbose;
 my $tx;
 my $runmode="none";
 my $core=4;
+my $atacseq=0;
 
 GetOptions(
 	"config|c=s" => \$configfile,
@@ -95,6 +100,7 @@ GetOptions(
 	"tx|t=s" => \$tx,	
 	"core=s" => \$core,	
 	"runmode|r=s" => \$runmode,		
+	"atacseq" => \$atacseq,
 	"verbose|v" => \$verbose,
 );
 
@@ -364,8 +370,13 @@ if(defined $configattrs{"FASTQ2"}) {
 		push @{$sample2fastq{$sample}},$fastq2trim;
 		
 		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
-
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
+		
+		unless($atacseq) {
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
+		}
+		else {
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -n 2 -a GATCGGAAGAGCACACGTCTGAACTCCAGTCAC -b CTGTCTCTTATACACATCT -b AGATGTGTATAAGAGACAG -A GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -B CTGTCTCTTATACACATCT -B AGATGTGTATAAGAGACAG -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";		
+		}
 	}
 }
 else {
@@ -386,7 +397,13 @@ else {
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
+		unless($atacseq) {
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
+		}
+		else {
+			#ATAC-Seq trim nextera
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -n 2 -a GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -b CTGTCTCTTATACACATCT -b AGATGTGTATAAGAGACAG $fastq1 -o $fastq1trim > $cutadaptlog;";
+		}		
 	}
 }
 		
