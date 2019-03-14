@@ -1,4 +1,5 @@
 #!/usr/bin/perl -w
+use strict;
 
 #use GTF file to output promoter bed file
 
@@ -14,30 +15,27 @@ use Getopt::Long;
 
 #none
 
-my $bed2pos="perl /apps/homer/bin/bed2pos.pl";
-
 
 ########
 #Interface
 ########
 
 
-my $version="0.1a";
+my $version="0.1";
 
-#v0.1a change default to 1000 up, 0 down. Included bed2pos convertion
 
 my $usage="
 
 gtf2promoter
 version: $version
-Usage: perl gtf2promoter.pl --gtf human.gtf -u 1000 -d 0 -o human_promoter_5kup100down
+Usage: perl gtf2promoter.pl --gtf human.gtf -u 5000 -d 100 -o human_promoter_5kup100down
 
 Description: extract promoter sequences for all transcripts and longest transcripts per gene from gtf
 
 Parameters:
 
     --gtf             GTF file
-    --up              Upstream length [1000]
+    --up              Upstream length [2000]
     --down            Downstream length [0]
     --out|-o          Output file suffix
                         out_anno.txt
@@ -61,7 +59,7 @@ my $params=join(" ",@ARGV);
 ########
 
 my $gtf;
-my $upstream=1000;
+my $upstream=2000;
 my $downstream=0;
 my $size;
 my $out;
@@ -86,9 +84,6 @@ GetOptions(
 my $txannofile="$out\_anno.txt";
 my $txallbed="$out\_alltxs.bed";
 my $txlongbed="$out\_longesttxs.bed";
-
-my $txallpos="$out\_alltxs.pos";
-my $txlongpos="$out\_longesttxs.pos";
 
 my %gene2tx;
 my %tx2info; #chr, start, end, str
@@ -160,15 +155,6 @@ foreach my $gene (sort keys %gene2tx) {
 close OUT1;
 close OUT2;
 close OUT3;
-
-
-
-#convert file format
-
-print STDERR "\nConverting bed files to pos files\n\n";
-
-system("$bed2pos $txallbed -o $txallpos");
-system("$bed2pos $txlongbed -o $txlongpos");
 
 
 

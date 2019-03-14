@@ -122,8 +122,8 @@ print LOG "\n";
 #test tx option
 
 my %tx2ref=(
-	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_UCSC_STAR/Human_RSEM",
-	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_UCSC_STAR/Mouse_RSEM",
+	"Human.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/Human_RSEM",
+	"Mouse.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/Mouse_RSEM",
 );
 
 

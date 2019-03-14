@@ -4,7 +4,7 @@ use Getopt::Long;
 
 
 
-my $version="0.1";
+my $version="0.1a";
 
 
 
@@ -22,7 +22,11 @@ Parameters:
     rnaseq-merge      Merge rnaseq-process results for downstream analyses
     rnaseq-de         Perform DE analysis using DESeq2
     
-	bs-fastq          Download and merge FASTQ files from Basespace	
+    chipseq-process   ChIP-seq QC, Align, and Peak Calling
+    chipseq-merge     Summarize ChIP-Seq results
+    chipseq-de        Perform DE analysis for ChIP-Seq
+	
+    bs-fastq          Download and merge FASTQ files from Basespace	
 
     ensembl2ucsc      Convert Ensembl gtf/fasta/bed into UCSC format
 
