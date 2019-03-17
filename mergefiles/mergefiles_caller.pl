@@ -19,6 +19,10 @@ use Getopt::Long;
 
 my $version="0.91";
 
+#v0.92 to be implemented, 1. don't retain input files rownames. 2. print to standard output for piping
+
+
+
 my $usage="
 
 mergefiles
@@ -37,6 +41,8 @@ Parameters:
     --case|-c         model case sensitive or not [F]
     --title|-t        files have title or not[T]
     --uniq|-u         only use unique items from model [F]
+
+    --norownames|-r   Dont retain input file rownames [T]
 
     --column|-l       only retrieve specific column(s) from inputs
 	
