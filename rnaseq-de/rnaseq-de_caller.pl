@@ -4,18 +4,15 @@ use Getopt::Long;
 use Cwd qw(abs_path);
 use File::Basename qw(basename);
 
-#CutAdapt+FASTQC+RSEM+STAR
-
 
 ########
 #Prerequisites
 ########
 
-my $cutadapt="/home/jyin/.local/bin/cutadapt";
-my $fastqc="/apps/FastQC/fastqc";
-my $rsem="/home/jyin/Programs/RSEM-1.3.1/rsem-calculate-expression";
-my $star="/home/jyin/Programs/STAR-2.6.1c/bin/Linux_x86_64/STAR";
 
+my $rscript="/apps/R-3.4.1/bin/Rscript";
+
+my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
 
 
 ########
@@ -27,23 +24,61 @@ my $version="0.1";
 
 my $usage="
 
-rnaseq-process
+rnaseq-de
 version: $version
-Usage: sbptools rnaseq-process [parameters]
+Usage: sbptools rnaseq-de [parameters]
+
+Description: Differential Expression (DE) tests using DESeq2. This script works for most of the counting based data, e.g. RNA-Seq, ChIP-Seq, ATAC-Seq
 
 
-Parameters:
-
-    --config|-c       Configuration file
+Mandatory Parameters:
+    --in|-i           Input folder from rnaseq-merge
     --output|-o       Output folder
+    --config|-c       Configuration file match the samples in the rnaseq-merge folder
+                           first column as sample name.
+
+    --formula|-f      Formula for GLM, e.g. ~Group.
+                          the last factor of the formula is used for comparison
+    --treatment       Treatment group name
+    --reference       Reference group name
 
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
+						
+Optional Parameters:
+    --pmethod         DESeq2 method, default as Wald test [Wald]
+    --qmethod         Multiple testing correction method [BH]
+
+    --useallsamples   Use all samples in config file for 
+                           gene dispersion calcultation [F]
+
+    --filter          Signal filter [auto]
+                         automatically defined signal cutoff as
+                           Count >= No. of samples * 2
+                         or can define a count number
+
+    --fccutoff        Log2 FC cutoff [1]
+    --qcutoff         Corrected P cutoff [0.05]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
     --verbose|-v      Verbose
 	
-	
+";
+
+
+#R parameters
+my $rparams="
+  -i, --in IN			Expr input file
+  -a, --anno ANNO			Annotation file
+  -o, --out OUT			Output file
+  -f, --formula FORMULA			DESeq formula
+  -t, --treat TREAT			treatment name
+  -r, --ref REF			reference name
+  --fccutoff FCCUTOFF			Log2 FC cutoff [default: 1]
+  -q, --qcutoff QCUTOFF			qcutoff [default: 0.05]
+  -p, --pmethod PMETHOD			Method used in DESeq2 [default: Wald]
+  --qmethod QMETHOD			FDR Method [default: BH]
+  --filter FILTER			Count filter for all the exps [default: 10]
 ";
 
 
@@ -60,22 +95,50 @@ my $params=join(" ",@ARGV);
 ########
 #Parameters
 ########
-
-
+	
+my $inputfolder;	
 my $configfile;
 my $outputfolder;
+
+my $formula;
+my $treatment;
+my $reference;
+
+my $pmethod="Wald";
+my $qmethod="BH";
+my $useallsamples="F";
+my $filter="auto";
+
+my $fccutoff=1;
+my $qcutoff=0.05;
+
 my $verbose;
 my $tx;
 my $runmode="none";
 
 GetOptions(
+	"in|i=s" => \$inputfolder,
 	"config|c=s" => \$configfile,
-	"output|o=s" => \$outputfolder,
+	"out|o=s" => \$outputfolder,
+	"formula|f=s" => \$formula,
+	
+	"treatment=s" => \$treatment,
+	"reference=s" => \$reference,
+	
+	"pmethod=s" => \$pmethod,
+	"qmethod=s" => \$qmethod,
+	"useallsamples=s" => \$useallsamples,
+	"filter=s" => \$filter,
+	
+	"fccutoff=s" => \$fccutoff,
+	"qcutoff=s" => \$qcutoff,
+	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 );
 
+$inputfolder = abs_path($inputfolder);
 $outputfolder = abs_path($outputfolder);
 
 if(!-e $outputfolder) {
@@ -90,10 +153,10 @@ if(!-e $scriptfolder) {
 }
 
 
-my $logfile="$outputfolder/rnaseq-process_run.log";
-my $newconfigfile="$outputfolder/rnaseq-process_config.txt";
+my $logfile="$outputfolder/rnaseq-de_run.log";
+my $newconfigfile="$outputfolder/rnaseq-de_config.txt";
 
-my $scriptfile1="$scriptfolder/rnaseq-process_run.sh";
+my $scriptfile1="$scriptfolder/rnaseq-de_run.sh";
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -103,18 +166,36 @@ my $now=current_time();
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
 print LOG "Current version: $version\n\n";
-print LOG "$cutadapt version:", getsysoutput("$cutadapt --version"),"\n";
-print LOG "$fastqc version:", getsysoutput("$fastqc --version"),"\n";
-print LOG "$rsem version:", getsysoutput("$rsem --version"),"\n";
-print LOG "$star version:", getsysoutput("$star --version"),"\n";
+
+#Report R package version here !!!
+
+
+
 print LOG "\n";
+
+print STDERR "\nsbptools rnaseq-de $version running ...\n\n" if $verbose;
+print LOG "\nsbptools rnaseq-de $version running ...\n\n";
 
 
 #test tx option
 
 my %tx2ref=(
-	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_STAR/Human_RSEM",
-	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_STAR/Mouse_RSEM",
+	"Human.B38.Ensembl84"=> { 
+		"star"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/",
+		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/"},
+	"Mouse.B38.Ensembl84"=>{ 
+		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/",
+		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/"}
 );
 
 
@@ -128,21 +209,61 @@ else {
 }
 
 
+#RNA-Seq
+my $genecountmerged="gene.results.merged.count.txt";
+my $txcountmerged="tx.results.merged.count.txt";
+
+my $genederesult="gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
+my $txderesult="tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
+
+
+#ChIP/ATAC-Seq
+
+
+
 ########
 #Process
 ########
 
-print STDERR "\nsbptools rnaseq-process running ...\n\n" if $verbose;
-print LOG "\nsbptools rnaseq-process running ...\n\n";
 
 #open config files to find fastqs
+#----------------
+#read design
+
+my %factors;
+my @factors_array;
+
+if($formula=~/\~(.+)/) {
+	my $cont=$1;
+	#a bit loose on factor name
+	while($cont=~/([^\+]+)/g) {
+		
+		#remove trailing white spaces
+		my $factor=$1;
+		$factor=~s/^\s+//;
+		$factor=~s/\s+$//;
+		
+		$factors{$factor}++;
+		push @factors_array,$factor;
+	}
+}
+
+print STDERR join(",",@factors_array)," factors are identified from -f $formula\n\n" if $verbose;
+print LOG join(",",@factors_array)," factors are identified from -f $formula\n\n";
+		
+#----------------
+#read config file
 
 my %sample2fastq;
 my %sample2indexname;
 my %configattrs;
+my %attr2name;
+
+my @configsamples;
 
 my $fileline=0;
-my $newconfigfiletitle;
+my @attrselcols;
+
 open(IN,$configfile) || die "Error reading $configfile. $!";
 open(OUT,">$newconfigfile") || die "Error reading $newconfigfile. $!";
 
@@ -151,196 +272,119 @@ while(<IN>) {
 	my @array=split/\t/;
 	if($fileline==0) {
 		for(my $num=0;$num<@array;$num++) {
-			#case sensitive match to key words, Sample, FASTQ1, FASTQ2, Index (for foldernames)
+			#case insensitive match to key words
 			$configattrs{uc $array[$num]}=$num;
 		}
 		
-		#check title
-		unless(defined $configattrs{"SAMPLE"} && defined $configattrs{"FASTQ1"}) {
-			#SAMPLE and FASTQ1 have to be defined. The others are optional
-			print STDERR "ERROR: SAMPLE and FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
-			print LOG "ERROR: SAMPLE and FASTQ1 need to be defined in $configfile. Input config includes:",join(",",map {uc $_} @array),"\n";
-			exit;
-		}
-		else {
-			print STDERR "Input config $configfile includes:",join(",",map {uc $_} @array),"\n\n" if $verbose;
-			print LOG "Input config $configfile includes:",join(",",map {uc $_} @array),"\n\n";
-		}
-		
-		if(defined $configattrs{"INDEX"}) {
-			$newconfigfiletitle=join("\t","INDEX",map {uc $_} (splice @array,$configattrs{"INDEX"},1));
-		}
-		else {
-			$newconfigfiletitle=join("\t","INDEX",map {uc $_} @array);
+		foreach my $factor (@factors_array) {
+			if(defined $configattrs{uc $factor}) {
+				print STDERR "$factor is identified at the ",$configattrs{uc $factor},"(th) column of $configfile.\n" if $verbose;
+				print LOG "$factor is identified at the ",$configattrs{uc $factor},"(th) column of $configfile.\n";
+				push @attrselcols,$configattrs{uc $factor};
+			}
+			else {
+				print STDERR "ERROR:$factor is not defined in $configfile.\n";
+				print LOG "ERROR:$factor is not defined in $configfile.\n";
+				exit;
+			}
 		}
 		
-		print OUT $newconfigfiletitle,"\n";
-		
-		print STDERR "New config $newconfigfile includes:",join(",",split("\t",$newconfigfiletitle)),"\n\n" if $verbose;
-		print LOG "New config $newconfigfile includes:",join(",",split("\t",$newconfigfiletitle)),"\n\n";		
+		#print out new config for DE
+		print OUT "Sample\t",join("\t",@factors_array),"\n";
 	
 	}
 	else {
 		
-		my $indexname;
-		my $newconfigline;
+		push @configsamples,$array[0];
 		
-		#need to change non word chars to words
-		if(defined $configattrs{"INDEX"}) {
-			$indexname=$array[$configattrs{"INDEX"}];
+		print OUT join("\t",@array[0,@attrselcols]),"\n";
+		
+		foreach my $factor (@factors_array) {
+			$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
 		}
-		else {
-			$indexname=$array[$configattrs{"SAMPLE"}];
-			$indexname=~s/[^\w-]/_/g;
-		}
-		
-		$sample2indexname{$array[$configattrs{"SAMPLE"}]}=$indexname;
-		
-		#fastq1
-		push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ1"}];
-		
-		#fastq2 (Read2)
-		if(defined $configattrs{"FASTQ2"}) {
-			push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ2"}];
-		}
-		
-		if(defined $configattrs{"INDEX"}) {
-			$newconfigline=join("\t",$indexname,(splice @array,$configattrs{"INDEX"},1));
-		}
-		else {
-			$newconfigline=join("\t",$indexname,@array);
-		}
-		
-		print OUT $newconfigline,"\n";		
-		
 	}
-	
 	$fileline++;
 }
 
 close IN;
 close OUT;
 
-
 #----------------
-#create folder
-print STDERR scalar(keys %sample2fastq)," samples identified from $configfile, including:\nSAMPLE\tINDEX\n",join("\n",map {$_."\t".$sample2indexname{$_}} sort keys %sample2indexname),"\n\n" if $verbose;
-print LOG scalar(keys %sample2fastq)," samples identified from $configfile, including:\nSAMPLE\tINDEX\n",join("\n",map {$_."\t".$sample2indexname{$_}} sort keys %sample2indexname),"\n\n" if $verbose;
-
-print STDERR "Make folders for different samples.\n\n" if $verbose;
-print LOG "Make folders for different samples.\n\n";
-
-foreach my $sample (sort keys %sample2fastq) {
-	my $samplefolder="$outputfolder/$sample";
-	if(!-e	$samplefolder) {
-		mkdir $samplefolder;
-	}
-}
-
-#----------------
-#prepare fastq file for cutadapt
-#assume truseq for now
-
-
-
-
-my %sample2workflow;
-
-#FASTQ files should all be .fastq.gz
-
-if(defined $configattrs{"FASTQ2"}) {
-	#PE
-	print STDERR "Printing cutadapt PE script.\n\n" if $verbose;
-	print LOG "Printing cutadapt PE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
-		
-		my $fastq1=$sample2fastq{$sample}[0];
-		my $fastq2=$sample2fastq{$sample}[0];
-		
-		my $fastq1trim="$samplefolder/".basename($fastq1);
-		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
-		push @{$sample2fastq{$sample}},$fastq1trim;
-
-		my $fastq2trim="$samplefolder/".basename($fastq2);
-		$fastq2trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
-		push @{$sample2fastq{$sample}},$fastq2trim;
-
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2;";
-	}
+#test treat and ref
+if(defined $attr2name{$factors_array[$#factors_array]}{$treatment}) {
+	print STDERR $attr2name{$factors_array[$#factors_array]}{$treatment}," samples identified for $treatment in $configfile.\n" if $verbose;
+	print LOG $attr2name{$factors_array[$#factors_array]}{$treatment}," samples identified for $treatment in $configfile.\n";
 }
 else {
-	#SE
-	print STDERR "Printing cutadapt SE script.\n\n" if $verbose;
-	print LOG "Printing cutadapt SE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
-	
-		my $fastq1=$sample2fastq{$sample}[0];
-		
-		my $fastq1trim="$samplefolder/".basename($fastq1);
-		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
-		push @{$sample2fastq{$sample}},$fastq1trim;
-
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1;";
-	}
+	print STDERR "ERROR:$treatment not defined in $configfile.\n";
+	print LOG "ERROR:$treatment not defined in $configfile.\n";	
+	exit;
 }
-		
 
-#----------------
-#FASTQC for trimmed reads
-
-
-if(defined $configattrs{"FASTQ2"}) {
-	#PE
-	print STDERR "Printing FASTQC PE script.\n\n" if $verbose;
-	print LOG "Printing FASTQC PE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
-		
-		$sample2workflow{$sample}.="$fastqc --nogroup -o $samplefolder -f fastq ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3].";";
-	}
+if(defined $attr2name{$factors_array[$#factors_array]}{$reference}) {
+	print STDERR $attr2name{$factors_array[$#factors_array]}{$reference}," samples identified for $reference in $configfile.\n" if $verbose;
+	print LOG $attr2name{$factors_array[$#factors_array]}{$reference}," samples identified for $reference in $configfile.\n";
 }
 else {
-	#SE
-	print STDERR "Printing FASTQC SE script.\n\n" if $verbose;
-	print LOG "Printing FASTQC SE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
-		
-		$sample2workflow{$sample}.="$fastqc --nogroup -o $samplefolder -f fastq ".$sample2fastq{$sample}[1].";";
-	}
-}	
-		
-	
-#----------------
-#RSEM for trimmed reads
+	print STDERR "ERROR:$reference not defined in $configfile.\n";
+	print LOG "ERROR:$reference not defined in $configfile.\n";	
+	exit;
+}
 
-if(defined $configattrs{"FASTQ2"}) {
-	#PE
-	print STDERR "Printing RSEM PE script.\n\n" if $verbose;
-	print LOG "Printing RSEM PE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
+
+#----------------
+#check input folder
+
+if(-e "$inputfolder/$genecountmerged") {
+	open(IN,"$inputfolder/$genecountmerged") || die $!;
+	while(<IN>) {
+		tr/\r\n//d;
+		my @array=split/\t/;
+		my @mergesamples=@array[1..$#array];
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample;";
+		if(join(",",@configsamples) ne join(",",@mergesamples)) {
+			print STDERR "ERROR:Sample order different.\n";
+			print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+			print STDERR "ERROR:Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";
+			
+			print LOG "ERROR:Sample order different.\n";
+			print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+			print LOG "ERROR:Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";
+
+			exit;
+		}
+		else {
+			print STDERR "Sample order matched.\n" if $verbose;
+			print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
+			print STDERR "Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n" if $verbose;
+			
+			print LOG "Sample order matched.\n";
+			print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
+			print LOG "Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";			
+		}
+		last;
 	}
+	close IN;
 }
 else {
-	#SE
-	print STDERR "Printing RSEM SE script.\n\n" if $verbose;
-	print LOG "Printing RSEM SE script.\n\n";
-	
-	foreach my $sample (sort keys %sample2fastq) {
-		my $samplefolder="$outputfolder/$sample";
-		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample;";
-	}
+	print STDERR "ERROR:$inputfolder/$genecountmerged doesn't exist. You need to provide a rnaseq-merge folder.\n";
+	print LOG "ERROR:$inputfolder/$genecountmerged doesn't exist. You need to provide a rnaseq-merge folder.\n";
+	exit;
+}
+
+########
+#Filter samples
+########
+
+if($useallsamples eq "T") {
+	#do something
+
+}
+
+else {
+	#do something
+
+
 }
 
 
@@ -352,9 +396,19 @@ else {
 
 open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
-foreach my $sample (sort keys %sample2workflow) {
-	print S1 $sample2workflow{$sample},"\n";
-}
+#foreach my $sample (sort keys %sample2workflow) {
+#	print S1 $sample2workflow{$sample},"\n";
+#}
+
+#Gene
+print S1 "$rscript $descript -i $inputfolder/$genecountmerged -a $newconfigfile -o $outputfolder/$genederesult -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;\n";
+
+#add annotation here!
+
+#Gene
+print S1 "$rscript $descript -i $inputfolder/$txcountmerged -a $newconfigfile -o $outputfolder/$txderesult -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;\n";
+
+#add annotation here!
 
 close S1;
 
@@ -363,6 +417,11 @@ close S1;
 print STDERR "To run locally, in shell type: sh $scriptfile1\n\n";
 print LOG "To run locally, in shell type: sh $scriptfile1\n\n";
 
+
+#whether to run it instantly
+if($runmode eq "local") {
+	system("sh $scriptfile1");
+}
 
 
 close LOG;
