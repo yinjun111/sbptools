@@ -14,13 +14,14 @@ my $rscript="/apps/R-3.4.1/bin/Rscript";
 
 my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
 
+my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.1";
+my $version="0.2";
 
 my $usage="
 
@@ -112,7 +113,7 @@ my $filter="auto";
 my $fccutoff=1;
 my $qcutoff=0.05;
 
-my $verbose;
+my $verbose=1;
 my $tx;
 my $runmode="none";
 
@@ -186,16 +187,16 @@ my %tx2ref=(
 		"fasta"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa",
 		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
-		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/",
-		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/"},
+		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
 		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
 		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
 		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
-		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/",
-		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/"}
+		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
 
 
@@ -210,14 +211,46 @@ else {
 
 
 #RNA-Seq
-my $genecountmerged="gene.results.merged.count.txt";
-my $txcountmerged="tx.results.merged.count.txt";
 
-my $genederesult="gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
-my $txderesult="tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
+#my $genecountmerged="gene.results.merged.count.txt";
+#my $txcountmerged="tx.results.merged.count.txt";
+#my $genederesult="gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
+#my $txderesult="tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
+
+
+my %rnaseq2files=(
+	"gene"=> { 
+		"count"=> "gene.results.merged.count.txt",
+		"selected"=> "gene.results.merged.count.selected.txt",
+		"result"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+		"resultanno"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
+	},
+	"tx"=> { 
+		"count"=> "tx.results.merged.count.txt",
+		"selected"=> "tx.results.merged.count.selected.txt",
+		"result"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+		"resultanno"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
+	}
+);
 
 
 #ChIP/ATAC-Seq
+
+my %chip2files=(
+	"gene"=> { 
+		"count"=> "gene.results.merged.count.txt",
+		"selected"=> "gene.results.merged.count.selected.txt",
+		"result"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt"
+	},
+	"tx"=> { 
+		"count"=> "tx.results.merged.count.txt",
+		"selected"=> "tx.results.merged.count.selected.txt",
+		"result"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt"
+	}
+);
+
+
+
 
 
 
@@ -263,6 +296,7 @@ my @configsamples;
 
 my $fileline=0;
 my @attrselcols;
+my @sampleselrows;
 
 open(IN,$configfile) || die "Error reading $configfile. $!";
 open(OUT,">$newconfigfile") || die "Error reading $newconfigfile. $!";
@@ -297,7 +331,17 @@ while(<IN>) {
 		
 		push @configsamples,$array[0];
 		
-		print OUT join("\t",@array[0,@attrselcols]),"\n";
+		#print out config file for DE
+		if($useallsamples eq "T") {
+			print OUT join("\t",@array[0,@attrselcols]),"\n";
+		}
+		else {
+			#only print out used samples
+			if($array[$configattrs{uc $factors_array[$#factors_array]}] eq $treatment || $array[$configattrs{uc $factors_array[$#factors_array]}] eq $reference) {
+				print OUT join("\t",@array[0,@attrselcols]),"\n";
+				push @sampleselrows,$fileline+1; #sample row number in config is the same with sample col number in count file
+			}
+		}
 		
 		foreach my $factor (@factors_array) {
 			$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
@@ -335,8 +379,8 @@ else {
 #----------------
 #check input folder
 
-if(-e "$inputfolder/$genecountmerged") {
-	open(IN,"$inputfolder/$genecountmerged") || die $!;
+if(-e "$inputfolder/".$rnaseq2files{"gene"}{"count"}) {
+	open(IN,"$inputfolder/".$rnaseq2files{"gene"}{"count"}) || die $!;
 	while(<IN>) {
 		tr/\r\n//d;
 		my @array=split/\t/;
@@ -345,30 +389,30 @@ if(-e "$inputfolder/$genecountmerged") {
 		if(join(",",@configsamples) ne join(",",@mergesamples)) {
 			print STDERR "ERROR:Sample order different.\n";
 			print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print STDERR "ERROR:Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";
+			print STDERR "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
 			
 			print LOG "ERROR:Sample order different.\n";
 			print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "ERROR:Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";
+			print LOG "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
 
 			exit;
 		}
 		else {
 			print STDERR "Sample order matched.\n" if $verbose;
 			print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
-			print STDERR "Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n" if $verbose;
+			print STDERR "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
 			
 			print LOG "Sample order matched.\n";
 			print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "Merged file $inputfolder/$genecountmerged sample order:",join(",",@mergesamples),"\n";			
+			print LOG "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n";			
 		}
 		last;
 	}
 	close IN;
 }
 else {
-	print STDERR "ERROR:$inputfolder/$genecountmerged doesn't exist. You need to provide a rnaseq-merge folder.\n";
-	print LOG "ERROR:$inputfolder/$genecountmerged doesn't exist. You need to provide a rnaseq-merge folder.\n";
+	print STDERR "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
+	print LOG "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
 	exit;
 }
 
@@ -377,17 +421,24 @@ else {
 ########
 
 if($useallsamples eq "T") {
-	#do something
-
+	#copy counting files to de folder
+	print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
+	print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
+	
+	system("cp $inputfolder/".$rnaseq2files{"gene"}{"count"}." $outputfolder/".$rnaseq2files{"gene"}{"selected"});
+	system("cp $inputfolder/".$rnaseq2files{"tx"}{"count"}." $outputfolder/".$rnaseq2files{"tx"}{"selected"});
 }
-
 else {
-	#do something
+	#copy counting files to de folder, using selected samples
+	print STDERR "--useallsamples F defined. Only selected samples are used for DE test.\n" if $verbose;
+	print STDERR "Sample columns ".join(",",@sampleselrows)." are used.\n\n" if $verbose;
+	
+	print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
+	print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
 
-
+	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"gene"}{"count"}." > $outputfolder/".$rnaseq2files{"gene"}{"selected"});
+	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"tx"}{"count"}." > $outputfolder/".$rnaseq2files{"tx"}{"selected"});
 }
-
-
 
 ########
 #Print out commands, for local and server run
@@ -401,14 +452,17 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 #}
 
 #Gene
-print S1 "$rscript $descript -i $inputfolder/$genecountmerged -a $newconfigfile -o $outputfolder/$genederesult -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;\n";
+print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"gene"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"gene"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
-#add annotation here!
+#Gene anno
+print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"gene"}{"result"}," -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/",$rnaseq2files{"gene"}{"resultanno"},";\n";
 
-#Gene
-print S1 "$rscript $descript -i $inputfolder/$txcountmerged -a $newconfigfile -o $outputfolder/$txderesult -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;\n";
 
-#add annotation here!
+#Tx
+print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"tx"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"tx"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
+
+#tx anno
+print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"tx"}{"result"}," -i ".$tx2ref{$tx}{"txanno"}." -o $outputfolder/",$rnaseq2files{"tx"}{"resultanno"},";\n";
 
 close S1;
 
