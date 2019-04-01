@@ -100,11 +100,12 @@ my $txfpkmmerged="tx.results.merged.fpkm.txt";
 
 #Create folders
 
-$outputfolder = abs_path($outputfolder);
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
 }
+
+$outputfolder = abs_path($outputfolder);
 
 
 my $scriptfolder="$outputfolder/scripts";

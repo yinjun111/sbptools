@@ -15,7 +15,7 @@ my $cutadapt="/home/jyin/.local/bin/cutadapt";
 my $fastqc="/apps/FastQC/fastqc";
 my $rsem="/home/jyin/Programs/RSEM-1.3.1/rsem-calculate-expression";
 my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
-
+my $bamcoverage="/apps/python-3.5.2/bin/bamCoverage";
 
 
 ########
@@ -23,10 +23,10 @@ my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
 ########
 
 
-my $version="0.2b";
+my $version="0.2c";
 
 #0.2b change ensembl to UCSC format
-
+#0.2c add bw generation
 
 my $usage="
 
@@ -85,12 +85,12 @@ GetOptions(
 	"verbose|v" => \$verbose,
 );
 
-$outputfolder = abs_path($outputfolder);
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
 }
 
+$outputfolder = abs_path($outputfolder);
 
 my $scriptfolder="$outputfolder/scripts";
 
@@ -359,6 +359,8 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample";
 		
 		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample;";
+		
+		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
 	}
 }
 else {
@@ -372,6 +374,8 @@ else {
 		my $samplefolder="$outputfolder/$sample";
 		
 		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample;";
+		
+		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
 	}
 }
 

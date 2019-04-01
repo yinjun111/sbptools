@@ -2,7 +2,9 @@
 
 library("argparser",quietly =T)
 
-version="0.2a"
+version="0.2b"
+
+#0.2b, change auto filter to *5. Add indfilter and cookscutoff option
 
 description=paste0("de_test\nversion ",version,"\n","Usage:\nDescription: Differential Expression calculation using DESeq2\n")
 
@@ -24,6 +26,9 @@ parser <- add_argument(parser, arg="--qcutoff", type="float", help = "qcutoff",d
 parser <- add_argument(parser, arg="--pmethod",type="character", help = "Method used in DESeq2",default="Wald")
 parser <- add_argument(parser, arg="--qmethod",type="character", help = "FDR Method",default="BH")
 parser <- add_argument(parser, arg="--filter",type="float", help = "Count filter for all the exps",default="10")
+parser <- add_argument(parser, arg="--independentfiltering",type="logical", help = "DESeq2 independentFiltering",default=T)
+parser <- add_argument(parser, arg="--cookscutoff",type="logical", help = "DESeq2 cooksCutoff",default=T)
+
 
 args = parse_args(parser)
 
@@ -37,6 +42,9 @@ core=1
 #saveRDS(args, args_file); print(args); quit(); #comment this after creating args_file
 #args = readRDS(args_file)  
 
+#independentfiltering=T
+#cookscutoff=T
+
 
 #####
 #Filter genes
@@ -49,11 +57,16 @@ filter_data <- function(mat,type="sum",cutoff=10,na.rm=0) {
 
 
 	if(cutoff=="auto") {
-	  num.cutoff<-ncol(mat)*2 # count cutoff eq two times number of samples
+	  num.cutoff<-ncol(mat)*5 # count cutoff eq two times number of samples #changed to *5 3/26
 	} else {
-	  num.cutoff<-as.numeric(cutoff)
+		if(grepl("^auto",cutoff,perl=T)) {
+			fold<-regmatches(cutoff,regexpr("\\d+$",cutoff,perl=T))
+			num.cutoff<-ncol(mat)*as.numeric(fold)
+		} else {
+			num.cutoff<-as.numeric(cutoff)
+		}
 	}
-	
+
 		
 	if(type == "sum") {
 		mat.sel<-mat[apply(mat,1,sum)>=num.cutoff,]
@@ -69,7 +82,7 @@ filter_data <- function(mat,type="sum",cutoff=10,na.rm=0) {
 #DESeq2
 ######
 
-deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald",qmethod="BH",core=core,treat,ref){
+deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald",qmethod="BH",core=core,treat,ref,independentfiltering=T,cookscutoff=T){
   library(DESeq2,quietly =T)
   #anno and design may need to be checked
 
@@ -82,7 +95,11 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 	
 	comp<-tail(all.vars(as.formula(design)),n=1) #the last variable of the formula is used as comparison
 	
-	res <- results(dds, pAdjustMethod =qmethod,contrast=c(comp,treat,ref))
+	if(cookscutoff) {
+		res <- results(dds, pAdjustMethod =qmethod,contrast=c(comp,treat,ref),independentFiltering=independentfiltering)
+	} else {
+		res <- results(dds, pAdjustMethod =qmethod,contrast=c(comp,treat,ref),independentFiltering=independentfiltering,cooksCutoff=cookscutoff)	
+	}
 	
 	fc<-res[,2]
 	p<-res[,5]
@@ -98,7 +115,7 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 
 	mat.result<-cbind(fc,stat,p,q,sig)
 	
-	colnames(mat.result)<-c(values(res)[[2]][2],"DESeq2 Stat:Mean,SE,Wald stat",values(res)[[2]][5],values(res)[[2]][6],paste("Significance: Log2FC ",round(fc_cutoff,2)," ",qmethod, "P ",q_cutoff,sep=""))
+	colnames(mat.result)<-c(values(res)[[2]][2],"DESeq2 Stat:Mean,SE,Wald stat",values(res)[[2]][5],values(res)[[2]][6],paste("Significance: Log2FC ",round(fc_cutoff,3)," ",qmethod, "P ",q_cutoff,sep=""))
 	
 	
 	
@@ -194,7 +211,7 @@ data.sel<-filter_data(data,cutoff=args$filter)
 rdatafile=sub(".txt$",".rdata",args$out,perl=T)
 
 
-data.sel.result<-deseq2_test(mat=data.sel,anno=anno,design=args$formula,fc_cutoff=args$fccutoff,q_cutoff=args$qcutoff,pmethod=args$pmethod,qmethod=args$qmethod,treat=args$treat,ref=args$ref)
+data.sel.result<-deseq2_test(mat=data.sel,anno=anno,design=args$formula,fc_cutoff=args$fccutoff,q_cutoff=args$qcutoff,pmethod=args$pmethod,qmethod=args$qmethod,treat=args$treat,ref=args$ref,independentfiltering=args$independentfiltering,cookscutoff=args$cookscutoff)
 
 write.table(data.sel.result$result,file=args$out,sep="\t",quote=F,col.names = NA)
 

@@ -13,31 +13,35 @@ use File::Basename qw(basename);
 my $rscript="/apps/R-3.4.1/bin/Rscript";
 
 my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
-
 my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
+my $reformatpeakcount="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/reformat_peak_count.pl";
+my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
+my $desummarybycalling="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks_bycalling.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.2a";
+my $version="0.3";
 
-#version 0.2a, add r version log
+#version 0.2, add de summary script
+#v0.3, add de summary by peak calling
+
 
 my $usage="
 
-rnaseq-de
+chipseq-de
 version: $version
-Usage: sbptools rnaseq-de [parameters]
+Usage: sbptools chipseq-de [parameters]
 
-Description: Differential Expression (DE) tests using DESeq2. This script works for most of the counting based data, e.g. RNA-Seq, ChIP-Seq, ATAC-Seq
+Description: Differential Expression (DE) tests using DESeq2 for ChIP-Seq and ATAC-Seq
 
 
 Mandatory Parameters:
-    --in|-i           Input folder from rnaseq-merge
+    --in|-i           Input folder from chipseq-merge
     --output|-o       Output folder
-    --config|-c       Configuration file match the samples in the rnaseq-merge folder
+    --config|-c       Configuration file match the samples in the chipseq-merge folder
                            first column as sample name.
 
     --formula|-f      Formula for GLM, e.g. ~Group.
@@ -149,6 +153,7 @@ if(!-e $outputfolder) {
 
 $outputfolder = abs_path($outputfolder);
 
+
 my $scriptfolder="$outputfolder/scripts";
 
 if(!-e $scriptfolder) {
@@ -156,11 +161,10 @@ if(!-e $scriptfolder) {
 }
 
 
-my $logfile="$outputfolder/rnaseq-de_run.log";
-my $newconfigfile="$outputfolder/rnaseq-de_config.txt";
-my $rlogfile="$outputfolder/rnaseq-de_r_env.log";
+my $logfile="$outputfolder/chipseq-de_run.log";
+my $newconfigfile="$outputfolder/chipseq-de_config.txt";
 
-my $scriptfile1="$scriptfolder/rnaseq-de_run.sh";
+my $scriptfile1="$scriptfolder/chipseq-de_run.sh";
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -171,38 +175,14 @@ print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
 print LOG "Current version: $version\n\n";
 
-print LOG "\n";
-
-print STDERR "\nsbptools rnaseq-de $version running ...\n\n" if $verbose;
-print LOG "\nsbptools rnaseq-de $version running ...\n\n";
-
-
-
 #Report R package version here !!!
 
-open(RLOG,"|$R --no-restore --no-save --slave") || die $!;
-select RLOG;
-print << "CODE";
 
-rinfo<-c()
 
-Rversion<-getRversion()
+print LOG "\n";
 
-rinfo<-rbind(rinfo,c("R",R.Version()\$version.string))
-rinfo<-rbind(rinfo,c("Rscript","$Rscript"))
-rinfo<-rbind(rinfo,c("R library",paste(.libPaths(), collapse=",")))
-
-for (package in c("DESeq2","argparser","ggplot2")) {
-	rinfo<-rbind(rinfo,c(package,packageDescription(package,fields="Version")))
-}
-
-colnames(rinfo)<-c("Package","Version")
-
-write.table(file="$outputfolder/$rlogfile",rinfo,sep="\t",quote=F,row.names=F)
-
-q()
-CODE
-close RLOG;
+print STDERR "\nsbptools chipseq-de $version running ...\n\n" if $verbose;
+print LOG "\nsbptools chipseq-de $version running ...\n\n";
 
 
 #test tx option
@@ -245,40 +225,40 @@ else {
 #my $txderesult="tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt";
 
 
-my %rnaseq2files=(
-	"gene"=> { 
-		"count"=> "gene.results.merged.count.txt",
-		"selected"=> "gene.results.merged.count.selected.txt",
-		"result"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
-		"resultanno"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
+my %chipseq2files=(
+	"all"=> { 
+		"raw"=> "all.reprod.peak.merged.raw.count.txt",
+		"count"=> "all.reprod.peak.merged.raw.countonly.txt",
+		"anno"=> "all.reprod.peak.merged.raw.anno.txt",	
+		"selected"=> "all.reprod.peak.merged.raw.countonly.selected.txt",
+		"result"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+		"resultanno"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
+		"summary"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.summary.txt",
+		"summaryanno"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.summary.anno.txt",
+
+		"resultbycalling"=> "all.reprod.peak.merged.summary.txt",
+		"resultbycallinganno"=> "all.reprod.peak.merged.dm.bycalling.anno.txt",
+		"summarybycalling"=> "all.reprod.peak.merged.dm.bycalling.summary.txt",
+		"summarybycallinganno"=> "all.reprod.peak.merged.dm.bycalling.summary.anno.txt",		
 	},
-	"tx"=> { 
-		"count"=> "tx.results.merged.count.txt",
-		"selected"=> "tx.results.merged.count.selected.txt",
-		"result"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
-		"resultanno"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
-	}
-);
-
-
-#ChIP/ATAC-Seq
-
-my %chip2files=(
-	"gene"=> { 
-		"count"=> "gene.results.merged.count.txt",
-		"selected"=> "gene.results.merged.count.selected.txt",
-		"result"=> "gene.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt"
+	"1000u0d_longest"=> { 
+		"raw"=> "1000u0d_longest_promoter.merged.raw.count.txt",
+		"count"=> "1000u0d_longest_promoter.merged.raw.countonly.txt",
+		"anno"=> "1000u0d_longest_promoter.merged.raw.anno.txt",	
+		"selected"=> "1000u0d_longest_promoter.merged.raw.countonly.selected.txt",
+		"result"=> "1000u0d_longest_promoter.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+		"resultanno"=> "1000u0d_longest_promoter.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
 	},
-	"tx"=> { 
-		"count"=> "tx.results.merged.count.txt",
-		"selected"=> "tx.results.merged.count.selected.txt",
-		"result"=> "tx.results.merged.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt"
-	}
+	"1000u0d_all"=> { 
+		"raw"=> "1000u0d_all_promoter.merged.raw.count.txt",
+		"count"=> "1000u0d_all_promoter.merged.raw.countonly.txt",
+		"anno"=> "1000u0d_all_promoter.merged.raw.anno.txt",	
+		"selected"=> "1000u0d_all_promoter.merged.raw.countonly.selected.txt",
+		"result"=> "1000u0d_all_promoter.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+		"resultanno"=> "1000u0d_all_promoter.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
+	},	
+
 );
-
-
-
-
 
 
 ########
@@ -313,6 +293,10 @@ print LOG join(",",@factors_array)," factors are identified from -f $formula\n\n
 		
 #----------------
 #read config file
+
+#!!!! match config file and merged count file.
+#This step may be difficult to control at chip-seq merge step
+
 
 my %sample2fastq;
 my %sample2indexname;
@@ -406,42 +390,42 @@ else {
 #----------------
 #check input folder
 
-if(-e "$inputfolder/".$rnaseq2files{"gene"}{"count"}) {
-	open(IN,"$inputfolder/".$rnaseq2files{"gene"}{"count"}) || die $!;
-	while(<IN>) {
-		tr/\r\n//d;
-		my @array=split/\t/;
-		my @mergesamples=@array[1..$#array];
-		
-		if(join(",",@configsamples) ne join(",",@mergesamples)) {
-			print STDERR "ERROR:Sample order different.\n";
-			print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print STDERR "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
-			
-			print LOG "ERROR:Sample order different.\n";
-			print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
+#convert files
+foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+	print STDERR "Converting $inputfolder/",$chipseq2files{$attr}{"raw"}," for DE test.\n";
+	system("$reformatpeakcount $inputfolder/".$chipseq2files{$attr}{"raw"}." $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"anno"});
+}
 
-			exit;
-		}
-		else {
-			print STDERR "Sample order matched.\n" if $verbose;
-			print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
-			print STDERR "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
-			
-			print LOG "Sample order matched.\n";
-			print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n";			
-		}
-		last;
+open(IN,"$outputfolder/".$chipseq2files{"all"}{"count"}) || die $!;
+while(<IN>) {
+	tr/\r\n//d;
+	my @array=split/\t/;
+	my @mergesamples=@array[1..$#array];
+	
+	if(join(",",@configsamples) ne join(",",@mergesamples)) {
+		print STDERR "ERROR:Sample order different.\n";
+		print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+		print STDERR "ERROR:Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n";
+		
+		print LOG "ERROR:Sample order different.\n";
+		print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+		print LOG "ERROR:Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n";
+
+		exit;
 	}
-	close IN;
+	else {
+		print STDERR "Sample order matched.\n" if $verbose;
+		print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
+		print STDERR "Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
+		
+		print LOG "Sample order matched.\n";
+		print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
+		print LOG "Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n\n";			
+	}
+	last;
 }
-else {
-	print STDERR "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
-	print LOG "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
-	exit;
-}
+close IN;
+
 
 ########
 #Filter samples
@@ -452,8 +436,9 @@ if($useallsamples eq "T") {
 	print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
 	print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
 	
-	system("cp $inputfolder/".$rnaseq2files{"gene"}{"count"}." $outputfolder/".$rnaseq2files{"gene"}{"selected"});
-	system("cp $inputfolder/".$rnaseq2files{"tx"}{"count"}." $outputfolder/".$rnaseq2files{"tx"}{"selected"});
+	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+		system("cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"});
+	}
 }
 else {
 	#copy counting files to de folder, using selected samples
@@ -463,8 +448,9 @@ else {
 	print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
 	print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
 
-	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"gene"}{"count"}." > $outputfolder/".$rnaseq2files{"gene"}{"selected"});
-	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"tx"}{"count"}." > $outputfolder/".$rnaseq2files{"tx"}{"selected"});
+	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+		system("cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"});
+	}
 }
 
 ########
@@ -478,18 +464,39 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 #	print S1 $sample2workflow{$sample},"\n";
 #}
 
-#Gene
-print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"gene"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"gene"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
-#Gene anno
-print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"gene"}{"result"}," -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/",$rnaseq2files{"gene"}{"resultanno"},";\n";
+foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+	#Gene
+	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"selected"}," -a $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
 
-#Tx
-print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"tx"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"tx"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
-
-#tx anno
-print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"tx"}{"result"}," -i ".$tx2ref{$tx}{"txanno"}." -o $outputfolder/",$rnaseq2files{"tx"}{"resultanno"},";\n";
+	#summary and annotation 
+	
+	if($attr eq "all") {
+		#Gene anno
+		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"result"}," -i $outputfolder/",$chipseq2files{$attr}{"anno"}," -o $outputfolder/",$chipseq2files{$attr}{"resultanno"},";";
+		
+		#summarize data
+		print S1 "$desummary -i $outputfolder/",$chipseq2files{$attr}{"resultanno"}," --tx $tx --out $outputfolder/",$chipseq2files{$attr}{"summary"},";";
+		
+		#anno
+		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"summary"}," -i ",$tx2ref{$tx}{"geneanno"}," -o $outputfolder/",$chipseq2files{$attr}{"summaryanno"},";";
+		
+		print S1 "\n";
+		
+		#DE by peak calling ...
+		print S1 "$desummarybycalling -i $inputfolder/",$chipseq2files{$attr}{"resultbycalling"}," --tx $tx --o1 $outputfolder/",$chipseq2files{$attr}{"resultbycallinganno"}," --o2 $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -a $inputfolder/",$chipseq2files{$attr}{"raw"},";";		
+		
+		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -i ",$tx2ref{$tx}{"geneanno"}," -o $outputfolder/",$chipseq2files{$attr}{"summarybycallinganno"},";";
+		
+		print S1 "\n";	
+	}
+	else {
+		#txs
+		#Gene anno
+		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"result"}," -i $outputfolder/",$chipseq2files{$attr}{"anno"},",",$tx2ref{$tx}{"txanno"}," -o $outputfolder/",$chipseq2files{$attr}{"resultanno"},";\n";
+	}
+}
 
 close S1;
 

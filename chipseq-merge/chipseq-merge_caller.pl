@@ -15,7 +15,7 @@ my $multiqc="/home/jyin/.local/bin/multiqc";
 my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 
 my $mergebed="/apps/bedtools2-2.26.0/bin/bedtools merge";
-my $renamebed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-merge/rename_bed.pl";
+my $processmergebed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-merge/process_mergebed.pl";
 my $selectbed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-merge/select_mergebed.pl";
 
 #homer location
@@ -35,7 +35,10 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2 now skips input samples for merging
+
 
 my $usage="
 
@@ -51,6 +54,9 @@ Parameters:
 	
     --config|-c       Configuration file #at this stage, configuration only, to make merged peaks
     --group|-g        Column name for sample groups to merge peaks
+
+    --groupsubset|--gss     Subset of groups selected for the merged folder, optional
+    --samplesubset|--sss    Subset of samples selected for the merged folder, optional
 
     --output|-o       Output folder
 
@@ -84,6 +90,8 @@ my $samples;
 my $inputfolders;
 
 my $group;
+my $groupsubset;
+my $samplesubset;
 
 my $configfile;
 my $outputfolder;
@@ -96,6 +104,8 @@ GetOptions(
 	#"samples|s=s" => \$samples,	
 	"config|c=s" => \$configfile,
 	"group|g=s" => \$group,
+	"groupsubset|gss=s" => \$groupsubset,
+	"samplesubset|sss=s" => \$samplesubset,		
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
 	"runmode|r=s" => \$runmode,		
@@ -117,17 +127,19 @@ my $allmergedbed_sorted="all.reprod.peak.merged_sorted.bed";
 my $allmergedpos="all.reprod.peak.merged.pos";
 my $allmergedbb="all.reprod.peak.merged_sorted.bb";
 
+
 #Create folders
 
-$outputfolder = abs_path($outputfolder);
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
 }
 
+$outputfolder = abs_path($outputfolder);
 
 my $scriptfolder="$outputfolder/scripts";
 my $tempfolder="$outputfolder/temp";
+
 
 if(!-e $scriptfolder) {
 	mkdir($scriptfolder);
@@ -141,6 +153,9 @@ my $logfile="$outputfolder/chipseq-merge_run.log";
 
 my $scriptfile1="$scriptfolder/chipseq-merge_run1.sh";
 my $scriptfile2="$scriptfolder/chipseq-merge_run2.sh";
+
+#new config
+my $newconfigfile="$outputfolder/chipseq-merge_config.txt";
 
 
 #write log file
@@ -166,13 +181,17 @@ my %tx2ref=(
 		"chrsize"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/chrNameLength.txt",
 		"fasta"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa",
 		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
-		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",},
+		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
 		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
 		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
 		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
-		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",}
+		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
 
 
@@ -225,15 +244,31 @@ else {
 
 my @samples_array;
 my %samples_hash; #check no dup samples
+my %groups_hash;
+
+my %samples_hash_sel; #check no dup samples
+my %groups_hash_sel;
+
+
+my @inputsamples_array;
 my $groupcol;
 my %group2samples;
+my %configattrs;
 
-if(defined $samples && length($samples)>0) {
-	foreach my $sample (split(",",$samples)) {
+if(defined $samplesubset && length($samplesubset)>0 && defined $groupsubset && length($groupsubset)>0) {
+	print STDERR "ERROR either --samplesubset or --groupsubset can be used, not both.\n\n";
+	print LOG "ERROR either --samplesubset or --groupsubset can be used, not both.\n\n";
+	exit;
+}
+
+
+#selected samples
+if(defined $samplesubset && length($samplesubset)>0) {
+	foreach my $sample (split(",",$samplesubset)) {
 		#keep the order of samples
 		push @samples_array, $sample;
-		unless (defined $samples_hash{$sample}) {
-			$samples_hash{$sample}++
+		unless (defined $samples_hash_sel{$sample}) {
+			$samples_hash_sel{$sample}++
 		}
 		else {
 			print STDERR "ERROR:$sample is defined multiple times in $samples.\n";
@@ -242,7 +277,28 @@ if(defined $samples && length($samples)>0) {
 		}
 	}
 }
-elsif(defined $configfile && length($configfile)>0) {
+
+#selected groups
+if(defined $groupsubset && length($groupsubset)>0) {
+	foreach my $group (split(",",$groupsubset)) {
+		#keep the order of samples
+		#push @samples_array, $sample;
+		unless (defined $groups_hash_sel{$group}) {
+			$groups_hash_sel{$group}++
+		}
+		else {
+			print STDERR "ERROR:$group is defined multiple times in $groupsubset.\n";
+			print LOG "ERROR:$group is defined multiple times in $groupsubset.\n";
+			exit;
+		}
+	}
+}
+
+
+open(OUT,">$newconfigfile") || die "Error writing $newconfigfile. $!";  #need to be implemented!!!!!
+
+#mandatory, a config file
+if(defined $configfile && length($configfile)>0) {
 	#another way of getting samples
 	
 	open(IN,$configfile) || die "Error reading $configfile. $!";
@@ -254,30 +310,89 @@ elsif(defined $configfile && length($configfile)>0) {
 		my @array=split/\t/;
 		
 		if($fileline==0) {
-			#title			
+			#record title into hash
 			for(my $num=0;$num<@array;$num++) {
-				if($array[$num] eq $group) {
-					$groupcol=$num;
-					last;
-				}
+				#case sensitive match to key words, Sample, FASTQ1, FASTQ2, Index (for foldernames)
+				$configattrs{uc $array[$num]}=$num;
 			}
 			
-			print STDERR "--group $group is identifed at column ",$groupcol+1," in $configfile.\n\n" if $verbose;
-			print LOG "--group $group is identifed at column ",$groupcol+1," in $configfile.\n\n";
+			if(defined $configattrs{uc $group}) {
+				$groupcol=$configattrs{uc $group};
+				print STDERR "--group $group is identifed at column ",$groupcol+1," in $configfile.\n\n" if $verbose;
+				print LOG "--group $group is identifed at column ",$groupcol+1," in $configfile.\n\n";
+			}
+			else {
+				print STDERR "ERROR:--group $group is not found in $configfile.\n\n" if $verbose;
+				print LOG "ERROR:--group $group is not found in $configfile.\n\n";
+				exit;
+			}
 			
+			if(defined $configattrs{"INPUT"}) {
+				print STDERR "Input samples is defined at column ",$configattrs{"INPUT"}+1," in $configfile.\n\n" if $verbose;
+				print LOG "Input samples is defined at column ",$configattrs{"INPUT"}+1," in $configfile.\n\n";
+			}
+
+			print OUT $_,"\n";
 		}
 		else {
 			my $sample=$array[0];
-			push @samples_array, $sample;
-			unless (defined $samples_hash{$sample}) {
-				$samples_hash{$sample}++;
-				$group2samples{$array[$groupcol]}{$sample}++;
+			
+			unless(defined $configattrs{"INPUT"} && $array[$configattrs{"INPUT"}]=~/Y/i ) {
+				#don't need input sample in the count file 
+
+				#by sample selection
+				if(defined $samplesubset && length($samplesubset)>0) {
+					if(defined $samples_hash_sel{$sample}) {
+						#push @samples_array, $sample;
+					
+						unless (defined $samples_hash{$sample}) {
+							$samples_hash{$sample}++;
+							$group2samples{$array[$groupcol]}{$sample}++;
+							print OUT $_,"\n";							
+						}
+						else {
+							print STDERR "ERROR:$sample is defined multiple times in $configfile.\n";
+							print LOG "ERROR:$sample is defined multiple times in $configfile.\n";
+							exit;
+						}
+					}
+				}
+				
+				#By group selection 
+
+				if(defined $groupsubset && length($groupsubset)>0) {
+					
+					if(defined $groups_hash_sel{$array[$groupcol]}) {
+						#push @samples_array, $sample;
+					
+						unless (defined $samples_hash{$sample}) {
+							push @samples_array, $sample;
+							$samples_hash{$sample}++;
+							$group2samples{$array[$groupcol]}{$sample}++;
+							print OUT $_,"\n";
+						}
+						else {
+							print STDERR "ERROR:$sample is defined multiple times in $configfile.\n";
+							print LOG "ERROR:$sample is defined multiple times in $configfile.\n";
+							exit;
+						}
+					}
+				}
+
+				#No subset selection
+				unless((defined $samplesubset && length($samplesubset)>0) || (defined $groupsubset && length($groupsubset)>0)) {
+					push @samples_array, $sample;
+					$samples_hash{$sample}++;
+					$group2samples{$array[$groupcol]}{$sample}++;
+					print OUT $_,"\n";
+				}
+				
 			}
 			else {
-				print STDERR "ERROR:$sample is defined multiple times in $configfile.\n";
-				print LOG "ERROR:$sample is defined multiple times in $configfile.\n";
-				exit;
+				push @inputsamples_array, $sample;
+			
 			}
+			
 		}
 		
 		$fileline++;
@@ -285,8 +400,27 @@ elsif(defined $configfile && length($configfile)>0) {
 	close IN;
 }
 
+close OUT;
+
+
+if(defined $samplesubset && length($samplesubset)>0 && keys %samples_hash != keys %samples_hash_sel) {
+	print STDERR "ERROR: samples selected by --samplesubset ",join(",",sort keys %samples_hash_sel)," is different from --config $configfile ",join(",",sort keys %samples_hash),"\n";
+	print LOG "ERROR: samples selected by --samplesubset ",join(",",sort keys %samples_hash_sel)," is different from --config $configfile ",join(",",sort keys %samples_hash),"\n";
+	exit;
+}
+
+if(defined $groupsubset && length($groupsubset)>0 && keys %group2samples != keys %groups_hash_sel) {
+	print STDERR "ERROR: groups selected by --groupsubset ",join(",",sort keys %groups_hash_sel)," is different from --config $configfile ",join(",",sort keys %group2samples),"\n";
+	print LOG "ERROR: groups selected by --groupsubset ",join(",",sort keys %groups_hash_sel)," is different from --config $configfile ",join(",",sort keys %group2samples),"\n";
+	exit;
+}
+
+
 print STDERR scalar(@samples_array)," samples identified: ",join(",",@samples_array),"\n\n" if $verbose;
 print LOG scalar(@samples_array)," samples identified: ",join(",",@samples_array),"\n\n";
+
+print STDERR scalar(@inputsamples_array)," input samples identified: ",join(",",@inputsamples_array),"\n\n" if $verbose;
+print LOG scalar(@inputsamples_array)," input samples identified: ",join(",",@inputsamples_array),"\n\n";
 
 print STDERR scalar(keys %group2samples)," groups of samples identified: ",join(",",sort keys %group2samples),"\n\n" if $verbose;
 print LOG scalar(keys %group2samples)," groups of samples identified: ",join(",",sort keys %group2samples),"\n\n";
@@ -317,13 +451,13 @@ foreach my $infolder (split(",",$inputfolders)) {
 		if(-d $file) {
 			my $samplename=basename($file);
 			
+			$sample2folder{$samplename}=abs_path($file);
+			
 			#see whether it is a defined sample
 			if(defined $samples_hash{$samplename}) {
 				print STDERR $samplename," is found in ",$file,".\n" if $verbose;
 				print LOG $samplename," is found in ",$file,".\n" if $verbose;
-				
-				$sample2folder{$samplename}=abs_path($file);
-				
+
 				my @samplefiles=glob("$file/*");
 				
 				foreach  my $samplefile (@samplefiles) {
@@ -364,7 +498,9 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
 #file for multiqc folder search
 open(OUT,">$tempfolder/samplefolders.txt") || die $!;
-foreach my $sample (@samples_array) {
+
+#chipped and input samples are both used in the multiqc
+foreach my $sample (@samples_array,@inputsamples_array) {
 	print OUT $sample2folder{$sample},"\n";
 }
 close OUT;
@@ -386,8 +522,8 @@ foreach my $pv (sort keys %{$tx2promoter{$tx}}) {
 	print LOG "Printing commands to annotate promoter based on ",$tx2promoter{$tx}{$pv},"\n\n";
 	
 	#command to get counting for promoters
-	print S1 "$annotatepeaks ",$tx2promoter{$tx}{$pv}," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs > $outputfolder/$pv\_$promotermergedcount_norm 2> $pv\_promoter_annotatepeaks_norm_run.log\n";
-	print S1 "$annotatepeaks ",$tx2promoter{$tx}{$pv}," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs -raw > $outputfolder/$pv\_$promotermergedcount_raw 2> $pv\_promoter_annotatepeaks_raw_run.log\n";
+	print S1 "$annotatepeaks ",$tx2promoter{$tx}{$pv}," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs > $outputfolder/$pv\_$promotermergedcount_norm 2> $outputfolder/$pv\_promoter_annotatepeaks_norm_run.log\n";
+	print S1 "$annotatepeaks ",$tx2promoter{$tx}{$pv}," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs -raw > $outputfolder/$pv\_$promotermergedcount_raw 2> $outputfolder/$pv\_promoter_annotatepeaks_raw_run.log\n";
 }
 
 #Merge called peaks for sample groups
@@ -423,7 +559,7 @@ foreach my $group (sort keys %group2samples) {
 		push @peakfiles, $peakfile;
 		push @renamed, $peakfilerenamed;
 		
-		print S1 "$renamebed -i $peakfile -o $peakfilerenamed -s $sample;"
+		print S1 "$processmergebed -i $peakfile -o $peakfilerenamed -s $sample;"
 	}
 	
 	#merge bed 
@@ -456,17 +592,17 @@ open(S2,">$scriptfile2") || die "Error writing $scriptfile2. $!";
 print S2 "cat ",join(" ",@groupselectedbeds)," | sort -k1,1 -k2,2n | $mergebed -c 4 -o collapse > $tempfolder/$allmergedbed\_original;";
 
 #rename
-print S2 "$renamebed -i $tempfolder/$allmergedbed\_original -o $allmergedbed -c;";
+print S2 "$processmergebed -i $tempfolder/$allmergedbed\_original -r ",join(",",@groupselectedbeds)," -o $outputfolder/$allmergedbed -c;";
 
 #bb
-print S2 "cat $allmergedbed | grep -v \"#\" | sort -k1,1 -k2,2n > $allmergedbed_sorted;$bedtobigbed $allmergedbed_sorted ".$tx2ref{$tx}{"chrsize"}." $allmergedbb;";
+print S2 "cat $outputfolder/$allmergedbed | grep -v \"#\" | sort -k1,1 -k2,2n > $outputfolder/$allmergedbed_sorted;$bedtobigbed $outputfolder/$allmergedbed_sorted ".$tx2ref{$tx}{"chrsize"}." $outputfolder/$allmergedbb;";
 	
 #convert to pos
-print S2 "$bed2pos $allmergedbed -o $allmergedpos;";
+print S2 "$bed2pos $outputfolder/$allmergedbed -o $outputfolder/$allmergedpos;";
 
 #annotate peaks
-print S2 "$annotatepeaks ",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs > $outputfolder/$allmergedcount_norm 2> allmergedcount_annotatepeaks_norm_run.log;";
-print S2 "$annotatepeaks ",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs -raw > $outputfolder/$allmergedcount_raw 2> allmergedcount_annotatepeaks_raw_run.log;";
+print S2 "$annotatepeaks $outputfolder/",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs > $outputfolder/$allmergedcount_norm 2> $outputfolder/allmergedcount_annotatepeaks_norm_run.log;";
+print S2 "$annotatepeaks $outputfolder/",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs -raw > $outputfolder/$allmergedcount_raw 2> $outputfolder/allmergedcount_annotatepeaks_raw_run.log;";
 
 print S2 "\n";
 
