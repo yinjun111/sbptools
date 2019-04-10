@@ -33,7 +33,7 @@ Parameters:
     ensembl2ucsc      Convert Ensembl gtf/fasta/bed into UCSC format
 
     mergefiles        Use a model file to merge different files together
-    text2excel        Build excel file using text file [not implemented]
+    text2excel        Build excel file using text file (by Andrew Hodges)
 
 ";
 
@@ -47,20 +47,20 @@ unless (@ARGV) {
 
 
 
-my $bs_fastq="perl /apps/sbptools/bs-fastq/bs-fastq_caller.pl";
+my $bs_fastq="/apps/sbptools/bs-fastq/bs-fastq_caller.pl";
 
-my $rnaseq_process="perl /apps/sbptools/rnaseq-process/rnaseq-process_caller.pl";
-my $rnaseq_merge="perl /apps/sbptools/rnaseq-merge/rnaseq-merge_caller.pl";
-my $rnaseq_de="perl /apps/sbptools/rnaseq-de/rnaseq-de_caller.pl";
-my $rnaseq_summary="perl /apps/sbptools/rnaseq-summary/rnaseq-summary_caller.pl";
+my $rnaseq_process="/apps/sbptools/rnaseq-process/rnaseq-process_caller.pl";
+my $rnaseq_merge="/apps/sbptools/rnaseq-merge/rnaseq-merge_caller.pl";
+my $rnaseq_de="/apps/sbptools/rnaseq-de/rnaseq-de_caller.pl";
+my $rnaseq_summary="/apps/sbptools/rnaseq-summary/rnaseq-summary_caller.pl";
 
-my $chipseq_process="perl /apps/sbptools/chipseq-process/chipseq-process_caller.pl";
-my $chipseq_merge="perl /apps/sbptools/chipseq-merge/chipseq-merge_caller.pl";
-my $chipseq_de="perl /apps/sbptools/chipseq-de/chipseq-de_caller.pl";
-my $chipseq_summary="perl /apps/sbptools/chipseq-summary/chipseq-summary_caller.pl";
+my $chipseq_process="/apps/sbptools/chipseq-process/chipseq-process_caller.pl";
+my $chipseq_merge="/apps/sbptools/chipseq-merge/chipseq-merge_caller.pl";
+my $chipseq_de="/apps/sbptools/chipseq-de/chipseq-de_caller.pl";
+my $chipseq_summary="/apps/sbptools/chipseq-summary/chipseq-summary_caller.pl";
 
-my $mergefiles="perl /apps/sbptools/mergefiles/mergefiles_caller.pl";
-my $text2excel ="perl /apps/sbptools/text2excel/text2excel_caller.pl";
+my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
+my $text2excel ="/apps/sbptools/text2excel/text2excel.pl";
 
 
 my %commands2program=(
