@@ -22,7 +22,10 @@ my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_d
 ########
 
 
-my $version="0.1";
+my $version="0.1a";
+
+#v0.1a, revised merge.txt title
+
 
 my $usage="
 
@@ -380,9 +383,24 @@ system("cut -f 1 ".$tx2ref{$tx}{"geneanno"}." > $outputfolder/$tx.genes.txt");
 ######
 #merge bysignal summary
 ######
+#Intergenic	TTS	exon	intron	promoter-TSS	Undirectional Total	Directional Total
+my @cates=("Intergenic","TTS","exon","intron","promoter-TSS","Undirectional_Total","Directional_Total");
 
-print STDERR "$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbysignalsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/chipseq-summary_BySignal_Reformated_summary_merged.txt"."\n";
-system("$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbysignalsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/chipseq-summary_BySignal_Reformated_summary_merged.txt");
+open(OUT,">$outputfolder/temp/merge_title.txt") || die $!;
+print OUT "Gene\t",join("\t",map {join("\t",$_,@cates,@cates[0..4],@cates[0..4])} sort keys %folder2allbysignal),"\n";
+close OUT;
+
+
+#Merge BySignal summary	
+print STDERR "$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbysignalsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/temp/chipseq-summary_BySignal_Reformated_summary_merged_temp.txt"."\n";
+#
+system("$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbysignalsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/temp/chipseq-summary_BySignal_Reformated_summary_merged_temp.txt"); #create a temporary file first
+#make title
+system("cat $outputfolder/temp/merge_title.txt > $outputfolder/chipseq-summary_BySignal_Reformated_summary_merged.txt");
+
+system("awk '{if(NR>1)print}' $outputfolder/temp/chipseq-summary_BySignal_Reformated_summary_merged_temp.txt >> $outputfolder/chipseq-summary_BySignal_Reformated_summary_merged.txt");
+
+
 
 #folder title
 open(OUT,">$outputfolder/temp/samples.txt") || die $!;
@@ -391,8 +409,6 @@ close OUT;
 
 
 #bysignal summary, by category
-#Intergenic	TTS	exon	intron	promoter-TSS	Undirectional Total	Directional Total
-my @cates=("Intergenic","TTS","exon","intron","promoter-TSS","Undirectional_Total","Directional_Total");
 
 for(my $num=0;$num<@cates;$num++) {
 	#get colnums for each category
@@ -409,7 +425,12 @@ for(my $num=0;$num<@cates;$num++) {
 #merge bycalling summary
 ######
 
-system("$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbycallingsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/chipseq-summary_ByCalling_Reformated_summary_merged.txt");
+system("$mergefiles -m $outputfolder/$tx.genes.txt -i ".join(",",map {$folder2allbycallingsum{$_}} sort keys %folder2allbysignal)." -o $outputfolder/temp/chipseq-summary_ByCalling_Reformated_summary_merged_temp.txt");
+
+system("cat $outputfolder/temp/merge_title.txt > $outputfolder/chipseq-summary_ByCalling_Reformated_summary_merged.txt");
+
+system("awk '{if(NR>1)print}' $outputfolder/temp/chipseq-summary_ByCalling_Reformated_summary_merged_temp.txt >> $outputfolder/chipseq-summary_ByCalling_Reformated_summary_merged.txt");
+
 
 #bysignal summary, by category
 #Intergenic	TTS	exon	intron	promoter-TSS	Undirectional Total	Directional Total
