@@ -4,6 +4,8 @@
 #Purpose: generate excel tables from input list of txt files
 ##
 
+
+
 #!/usr/bin/perl -w
 use strict;
 use Getopt::Long;
@@ -26,23 +28,18 @@ use Excel::Writer::XLSX;
 
 my $version="0.1";
 
-#v0.1 current implementation
-#Done: 1) command line in linux (getopt/long included above & below)
-#Done: 2) accept multiple input text files into different tabs
-###  Done:    optional: input to name those tabs differently
-# Done:  3) Prevent automatic conversion (e.g. specify columns that should be txt and not general
+#v0.92 to be implemented, 
+#1) command line in linux (getopt/long included above & below)
+#2) accept multiple input text files into different tabs
+###    optional: input to name those tabs differently
+#3) Prevent automatic conversion (e.g. specify columns that should be txt and not general
 #Optional:  
-#####Done:  first row bold
-#####In progress: first row has filter function
-#####In progress: freeze the first row
+#####first row bold
+#####first row has filter function
+#####freeze the first row
 #####Color theme selection
 ####example  $text2excel -i file1,file2,file3 -n name1,name2,name3 -o merged.xlsx
 
-#V0.2 - to be done:
-# 1) first row with filter function
-# 2) freeze first row
-# 3) expand color theme selection - currently piecewise
-# 4) error-checking of input parameters (currently missing)
 
 my $usage="
 text2excel
@@ -103,7 +100,8 @@ GetOptions(
 
 
 ####Next create the excel object
-my $excel = Excel::Writer::XLSX->new( $outfile );
+print "- Generating excel object: \n";
+my $excel = Excel::Writer::XLSX->new( $outfile ) or die $!;
 $excel->set_properties(
    #title => $title,
    author => "BI Shared Resource",
@@ -113,6 +111,7 @@ $excel->set_properties(
 #$excel->set_custom_property('Date generated',date(),'number');
 
 #####Parse params
+print "- Setting up excel formatting: \n";
 my @ins = split(/,/,$infiles);
 my $out = $outfile;
 my @names = split(/,/,$names);
@@ -147,7 +146,14 @@ foreach my $R (keys @ins){   #index
 	#for now, just open the file & use names for sheets
 	my $sname = $filex;
 	if(exists($names[$R])){ $sname = $names[$R]; }
+	#print length($sname)."\n";
+	
+	#update: check length & adjust to 30 if too long.
+	my $len = length($sname);
+	if($len > 31){$sname = substr($sname,0,30);}
+	#print "\nUsing: ".$sname."\n";
 	$worksheets[$R] = $excel->add_worksheet($sname);
+	print "- - Created new sheet: ".$sname."\n";
 	#my $tempsheet = $worksheets[$R];
 	
 	###apply operations to the current worksheet
@@ -191,12 +197,12 @@ foreach my $R (keys @ins){   #index
 
 
 ###End program
-$excel->close() or die "Error Closing File: $!";
+$excel->close() or die "Error Closing File: $! \n";
+print "- Successfully closed & saved excel file.\n";
 
 
 
-
-####Helpful functions (for future dev't):
+####Helpful functions:
 #use Excel::Writer::XLSX::Utility;
 #( $row, $col ) = xl_cell_to_rowcol( 'C2' );    # (1, 2)
 #$str           = xl_rowcol_to_cell( 1, 2 ); 
