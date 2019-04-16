@@ -60,7 +60,7 @@ my $chipseq_de="/apps/sbptools/chipseq-de/chipseq-de_caller.pl";
 my $chipseq_summary="/apps/sbptools/chipseq-summary/chipseq-summary_caller.pl";
 
 my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
-my $text2excel ="/apps/sbptools/text2excel/text2excel.pl";
+my $text2excel ="perl /apps/sbptools/text2excel/text2excel.pl";
 
 
 my %commands2program=(
