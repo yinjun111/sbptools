@@ -1,17 +1,12 @@
-#!/usr/bin/perl
-#Andrew P. Hodges, Ph.D.
-#5 April 2019
-#Purpose: generate excel tables from input list of txt files
-##
-
-
-
 #!/usr/bin/perl -w
 use strict;
 use Getopt::Long;
 use Excel::Writer::XLSX;
 
-#CutAdapt+FASTQC+RSEM+STAR
+#Andrew P. Hodges, Ph.D.
+#5 April 2019
+#Purpose: generate excel tables from input list of txt files
+##
 
 
 ########
@@ -62,7 +57,7 @@ Parameters:
 	--color|-c        color theme to use
 
     #themes to be used
-    --theme           theme1, by AH,default [theme1]
+	--theme           theme1, by AH,default [theme1]
                       theme2, by JY, adding wrap text, filter etc.
                       theme0, don't change format
 
@@ -151,6 +146,7 @@ my $col = $color;
 ####Also create format blocks for the excel components
 my $formatHeader = $excel->add_format();
 
+#choice to use different theme
 if($theme eq "theme1") {
 	$formatHeader->set_bold();
 	$formatHeader->set_color('red');
@@ -235,6 +231,7 @@ foreach my $R (keys @ins){   #index
 	}
 	close in;	
 	
+	#additional step to change theme
 	if($theme eq "theme2") {
 			#freeze first row
 			$worksheets[$R]->freeze_panes( 1, 0 );
