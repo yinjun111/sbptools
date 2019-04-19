@@ -26,7 +26,12 @@ use Excel::Writer::XLSX;
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2 by Jun
+#add new theme to wrap text, filter and freeze panel
+#add log file and timestamp
+
 
 #v0.92 to be implemented, 
 #1) command line in linux (getopt/long included above & below)
@@ -51,9 +56,16 @@ Parameters:
 	--out|-o          output file
 	--names|-n        Sheet names
 	--txt|-t          column number starting from 0 that should be txt not general separated by \",\"
+
 	--boldfrow|-bfr   bold first row [F]
 	--boldfcol|-bfc   bold first column [F]
 	--color|-c        color theme to use
+
+    #themes to be used
+    --theme           theme1, by AH,default [theme1]
+                      theme2, by JY, adding wrap text, filter etc.
+                      theme0, don't change format
+
 	--delim|-d        default is tab-delimited; use '' for other entries
 	--verbose|-v      Verbose\n	
 ";
@@ -80,12 +92,14 @@ my $boldfrow="F";
 my $boldfcol="F";
 my $verbose;
 my $color = "";
+my $theme="theme1";
 
 GetOptions(
 	
 	"in|i=s" => \$infiles,
 	"out|o=s" => \$outfile,
 	"names|n=s" => \$names,
+	"theme=s" => \$theme,	
 	"txt|t=s" => \$txt,
 	"boldfrow|bfr" => \$boldfrow,
 	"boldfcol|bfc" => \$boldfcol,
@@ -93,8 +107,8 @@ GetOptions(
 	"verbose|v" => \$verbose,
 );
 
-#my $logfile=$outfile;
-#$logfile=~s/\.txt/_mergefiles.log/;
+my $logfile=$outfile;
+$logfile=~s/\.\w+$/_text2excel.log/;
 
 ####First check if the file exists & it is xlsx
 
@@ -110,6 +124,19 @@ $excel->set_properties(
 );
 #$excel->set_custom_property('Date generated',date(),'number');
 
+
+######write log file
+open(LOG, ">$logfile") || die "Error write $logfile. $!";
+
+my $now=current_time();
+
+print LOG "perl $0 $params\n\n";
+print LOG "Start time: $now\n\n";
+print LOG "Current version: $version\n\n";
+
+print LOG "\n";
+
+
 #####Parse params
 print "- Setting up excel formatting: \n";
 my @ins = split(/,/,$infiles);
@@ -123,9 +150,19 @@ my $col = $color;
 
 ####Also create format blocks for the excel components
 my $formatHeader = $excel->add_format();
-$formatHeader->set_bold();
-$formatHeader->set_color('red');
-$formatHeader->set_align('center');
+
+if($theme eq "theme1") {
+	$formatHeader->set_bold();
+	$formatHeader->set_color('red');
+	$formatHeader->set_align('center');
+}
+elsif($theme eq "theme2") {
+	$formatHeader->set_bold();
+	$formatHeader->set_color('black');
+	$formatHeader->set_align('center');
+	$formatHeader->set_text_wrap();
+}
+
 #);
 
 my $formatColtxt = $excel->add_format(
@@ -158,6 +195,7 @@ foreach my $R (keys @ins){   #index
 	
 	###apply operations to the current worksheet
 	my $i = -1; #row index
+	my $maxcol=0;
 	open in, $filex or die $!;
 	while(<in>){
 		$i++;
@@ -166,6 +204,11 @@ foreach my $R (keys @ins){   #index
 		if($string ne ""){
 			my @row = split(/\t/,$string);
 			my $count = @row;
+			
+			#find the max column number
+			if($count>$maxcol) {
+				$maxcol=$count;
+			}
 			
 			#xl_rowcol_to_cell( 1, 2 )
 			if($i == 0){ 
@@ -191,7 +234,15 @@ foreach my $R (keys @ins){   #index
 		
 	}
 	close in;	
+	
+	if($theme eq "theme2") {
+			#freeze first row
+			$worksheets[$R]->freeze_panes( 1, 0 );
+			$worksheets[$R]->autofilter( 0, 0, $i, $maxcol-1 );
+	}
+	
 	###finalize worksheet
+	
 }
 
 
@@ -200,7 +251,7 @@ foreach my $R (keys @ins){   #index
 $excel->close() or die "Error Closing File: $! \n";
 print "- Successfully closed & saved excel file.\n";
 
-
+close LOG;
 
 ####Helpful functions:
 #use Excel::Writer::XLSX::Utility;
@@ -237,3 +288,12 @@ print "- Successfully closed & saved excel file.\n";
 # );
 
 
+########
+#Functions
+########
+
+sub current_time {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+	my $now = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	return $now;
+}
