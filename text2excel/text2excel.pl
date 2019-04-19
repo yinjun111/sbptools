@@ -82,7 +82,7 @@ my $params=join(" ",@ARGV);
 my $infiles;
 my $outfile;
 my $names;
-my $txt;
+my $txt=0;
 my $boldfrow="F";
 my $boldfcol="F";
 my $verbose;
@@ -192,8 +192,8 @@ foreach my $R (keys @ins){   #index
 	###apply operations to the current worksheet
 	my $i = -1; #row index
 	my $maxcol=0;
-	open in, $filex or die $!;
-	while(<in>){
+	open IN, $filex or die $!;
+	while(<IN>){
 		$i++;
 		chomp(my $string = $_);
 		#first see if data is 
@@ -229,7 +229,7 @@ foreach my $R (keys @ins){   #index
 		else{ $worksheets[$R]->write("\n");}
 		
 	}
-	close in;	
+	close IN;	
 	
 	#additional step to change theme
 	if($theme eq "theme2") {
