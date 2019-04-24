@@ -16,16 +16,19 @@ my $multiqc="/home/jyin/.local/bin/multiqc";
 my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
 
+my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
+my $homer="/home/jyin/Programs/Homer/bin";
+my $findmotifsgenome="$homer/findMotifsGenome.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.1a";
+my $version="0.1b";
 
 #v0.1a, revised merge.txt title
-
+#v0.1b, add tfbs
 
 my $usage="
 
@@ -52,6 +55,8 @@ Parameters:
 
     --fccutoff        Log2 FC cutoff, optional
     --qcutoff         Corrected P cutoff, optional
+
+    --tfbs            Calculate TFBS for revised DE files [F]
 	
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
@@ -89,8 +94,10 @@ my $geneinput;
 my $txinput;
 my $verbose;
 my $tx;
+my $tfbs="F";
 my $pcol=4; #hidden param
 my $runmode="none";
+
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -103,6 +110,7 @@ GetOptions(
 	"fccutoff=s" => \$fccutoff,
 	"qcutoff=s" => \$qcutoff,
 	"pcol=i"=> \$pcol,
+	"tfbs=s"=> \$tfbs,
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
@@ -176,6 +184,14 @@ else {
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
 }
 
+my $genomeversion;
+
+if($tx=~/Human.B38/) {
+	$genomeversion="hg38";
+}
+elsif($tx=~/Mouse.B38/) {
+	$genomeversion="mm10";
+}
 
 #Files for merging
 #Examples
@@ -187,6 +203,16 @@ else {
 #all.reprod.peak.merged.raw.count.DESeq2.Wald.FC0.585.BH.P0.05.summary.txt #DM summary by Signal
 #all.reprod.peak.merged.raw.count.DESeq2.Wald.FC0.585.BH.P0.05.anno_rev.txt #DM by Signal
 #all.reprod.peak.merged.dm.bycalling.summary.txt #DM Summary by calling
+
+my $scriptfolder="$outputfolder/scripts";
+
+if(!-e $scriptfolder) {
+	mkdir($scriptfolder);
+}
+
+my $scriptfile1="$scriptfolder/chipseq-summary_run1.sh";
+
+
 
 ########
 #Process
@@ -291,6 +317,7 @@ my %folder2genesig;
 my %folder2geneinfo;
 my %folder2genetitle;
 
+open(S1,">$scriptfile1") || die "ERROR:Can't write into $scriptfile1.$!\n";
 
 #redefine DM peaks
 if(defined $fccutoff && length($fccutoff)>0) {
@@ -363,12 +390,29 @@ if(defined $fccutoff && length($fccutoff)>0) {
 			
 			#regenerate By Signal Sum
 			
-			system("$desummary -i $outputfolder/$folder\_BySignal_Reformated.txt --tx $tx --out $outputfolder/$folder\_BySignal_Reformated_summary.txt");			
+			system("$desummary -i $outputfolder/$folder\_BySignal_Reformated.txt --tx $tx --out $outputfolder/$folder\_BySignal_Reformated_summary.txt");
 			
+			#TFBS
+			if($tfbs eq "T") {
+				#TFBS
+				mkdir("$outputfolder/$folder\_deboth_tfbs");
+				mkdir("$outputfolder/$folder\_deup_tfbs");
+				mkdir("$outputfolder/$folder\_dedown_tfbs");
+				
+				print S1 "$convertdetopos -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.pos;";
+				#run the three processes in bg
+				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de.pos $genomeversion $outputfolder/$folder\_deboth_tfbs -size given -preparsedDir $outputfolder/$folder\_deboth_tfbs/preparsed &";
+				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_up.pos $genomeversion $outputfolder/$folder\_deup_tfbs -size given -preparsedDir $outputfolder/$folder\_deup_tfbs/preparsed &";
+				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_down.pos $genomeversion $outputfolder/$folder\_dedown_tfbs -size given -preparsedDir $outputfolder/$folder\_dedown_tfbs/preparsed &";
+				print S1 "\n";
+			}
+	
 			#redefine sum file
 			$folder2allbysignalsum{$folder}="$outputfolder/$folder\_BySignal_Reformated_summary.txt";
 			
 			$bysignalsumfiles{"$outputfolder/$folder\_BySignal_Reformated_summary.txt"}++;
+			
+			
 		}
 	}
 	else {
@@ -376,6 +420,7 @@ if(defined $fccutoff && length($fccutoff)>0) {
 	}
 }
 
+close S1;
 
 #copy gene names 
 system("cut -f 1 ".$tx2ref{$tx}{"geneanno"}." > $outputfolder/$tx.genes.txt");

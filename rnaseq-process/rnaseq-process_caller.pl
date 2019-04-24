@@ -23,10 +23,11 @@ my $bamcoverage="/apps/python-3.5.2/bin/bamCoverage";
 ########
 
 
-my $version="0.2c";
+my $version="0.2d";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
+#0.2d correct bug for PE
 
 my $usage="
 
@@ -279,7 +280,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample";
 		
 		my $fastq1=$sample2fastq{$sample}[0];
-		my $fastq2=$sample2fastq{$sample}[0];
+		my $fastq2=$sample2fastq{$sample}[1]; #
 		
 		my $fastq1trim="$samplefolder/".basename($fastq1);
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
@@ -358,7 +359,9 @@ if(defined $configattrs{"FASTQ2"}) {
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample;";
+		my $rsemlog="$samplefolder/$sample\_rsem.log";
+		
+		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog;";
 		
 		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
 	}

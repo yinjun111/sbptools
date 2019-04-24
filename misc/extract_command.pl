@@ -27,7 +27,7 @@ Description: extract a command to run from a sbptools generated script file
 
 Parameters:
 
-    --in|-i           input shell script(s)
+    --in|-i           input shell script(s), support glob, e.g. \"*.sh\"
     --command|-c      command to extract
     --out|-o          output shell script
 
@@ -66,6 +66,22 @@ GetOptions(
 );
 
 
+#log
+my $logfile=$outfile;
+$logfile=~s/.\w+$/_extractcommand.log/;
+
+
+#write log file
+open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
+
+my $now=current_time();
+
+print LOG "perl $0 $params\n\n";
+print LOG "Start time: $now\n\n";
+print LOG "Current version: $version\n\n";
+print LOG "\n";
+
+
 ########
 #Process
 ########
@@ -73,42 +89,57 @@ GetOptions(
 
 open(OUT,">$outfile") || die "Error writing $outfile. $!";
 
-foreach my $infile (split(",",$infiles)) {
-
-	open(IN,$infile) || die "Error openning $infile. $!";
-	while(<IN>) {
-		tr/\r\n//d;
-		if($type eq "only") {
-			#only the selected command
-			if($_=~/($command[^;]+)/) {
-				print OUT $1,"\n";
-			}
-		}
-		elsif($type=~/^(\d+)/) {
-			#several commands after the selection
-			my $commands;
-			my $line;
-			if($_=~/($command.+)/) {
-				$line=$1;
-				my $step=0;
-				
-				while($line=~/([^;]+)/g && $step<$type) {
-					$commands.=$1.";";
-					$step++;
+foreach my $infileg (split(",",$infiles)) {
+	
+	foreach my $infile (glob($infileg)) {
+		
+		print STDERR "Reading $infile.\n";
+		print LOG "Reading $infile.\n";
+		
+		open(IN,$infile) || die "Error openning $infile. $!";
+		while(<IN>) {
+			tr/\r\n//d;
+			if($type eq "only") {
+				#only the selected command
+				if($_=~/($command[^;]+)/) {
+					print OUT $1,"\n";
 				}
-				print OUT $commands,"\n";
-			}	
-		}
-		else {
-			#everything after this command
-			if($_=~/($command.+)/) {
-				print OUT $1,"\n";
+			}
+			elsif($type=~/^(\d+)/) {
+				#several commands after the selection
+				my $commands;
+				my $line;
+				if($_=~/($command.+)/) {
+					$line=$1;
+					my $step=0;
+					
+					while($line=~/([^;]+)/g && $step<$type) {
+						$commands.=$1.";";
+						$step++;
+					}
+					print OUT $commands,"\n";
+				}	
+			}
+			else {
+				#everything after this command
+				if($_=~/($command.+)/) {
+					print OUT $1,"\n";
+				}
 			}
 		}
+		close IN;
 	}
-	close IN;
 }
 close OUT;
+close LOG;
 
+########
+#Functions
+########
 
+sub current_time {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+	my $now = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	return $now;
+}
 

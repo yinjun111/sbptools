@@ -214,6 +214,14 @@ elsif(defined $configfile && length($configfile)>0) {
 	}
 	close IN;
 }
+else {
+	#adding error message for no samples defined
+	print STDERR "ERROR:Either --config or --samples needs to be defined.\n";
+	print LOG "ERROR:Either --config or --samples needs to be defined.\n";
+
+	exit;
+
+}
 
 print STDERR scalar(@samples_array)," samples identified: ",join(",",@samples_array),"\n\n" if $verbose;
 print LOG scalar(@samples_array)," samples identified: ",join(",",@samples_array),"\n\n";

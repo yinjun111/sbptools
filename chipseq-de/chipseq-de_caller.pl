@@ -12,11 +12,17 @@ use File::Basename qw(basename);
 
 my $rscript="/apps/R-3.4.1/bin/Rscript";
 
+my $homer="/home/jyin/Programs/Homer/bin";
+my $findmotifsgenome="$homer/findMotifsGenome.pl";
+
 my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
 my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 my $reformatpeakcount="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/reformat_peak_count.pl";
 my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
 my $desummarybycalling="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks_bycalling.pl";
+my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
+
+
 
 ########
 #Interface
@@ -207,6 +213,7 @@ my %tx2ref=(
 );
 
 
+
 if(defined $tx2ref{$tx}) {
 	print STDERR "Starting analysis using $tx.\n\n" if $verbose;
 	print LOG "Starting analysis using $tx.\n\n";
@@ -216,6 +223,14 @@ else {
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
 }
 
+my $genomeversion;
+
+if($tx=~/Human.B38/) {
+	$genomeversion="hg38";
+}
+elsif($tx=~/Mouse.B38/) {
+	$genomeversion="mm10";
+}
 
 #RNA-Seq
 
@@ -232,6 +247,11 @@ my %chipseq2files=(
 		"anno"=> "all.reprod.peak.merged.raw.anno.txt",	
 		"selected"=> "all.reprod.peak.merged.raw.countonly.selected.txt",
 		"result"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.txt",
+
+		"depos"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.pos",
+		"deposup"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff\_up.pos",
+		"deposdown"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff\_down.pos",
+
 		"resultanno"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.anno.txt",
 		"summary"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.summary.txt",
 		"summaryanno"=> "all.reprod.peak.merged.raw.count.DESeq2.$pmethod.FC$fccutoff.$qmethod.P$qcutoff.summary.anno.txt",
@@ -488,6 +508,14 @@ foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 		print S1 "$desummarybycalling -i $inputfolder/",$chipseq2files{$attr}{"resultbycalling"}," --tx $tx --o1 $outputfolder/",$chipseq2files{$attr}{"resultbycallinganno"}," --o2 $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -a $inputfolder/",$chipseq2files{$attr}{"raw"},";";		
 		
 		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -i ",$tx2ref{$tx}{"geneanno"}," -o $outputfolder/",$chipseq2files{$attr}{"summarybycallinganno"},";";
+		
+		
+		#TFBS
+		print S1 "$convertdetopos -i $outputfolder/",$chipseq2files{$attr}{"result"}," -o $outputfolder/",$chipseq2files{$attr}{"depos"},";";
+		#run the three processes in bg
+		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"depos"}," $genomeversion $outputfolder/deboth_tfbs -size given &";
+		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposup"}," $genomeversion $outputfolder/deup_tfbs -size given &";
+		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposdown"}," $genomeversion $outputfolder/dedown_tfbs -size given &";
 		
 		print S1 "\n";	
 	}
