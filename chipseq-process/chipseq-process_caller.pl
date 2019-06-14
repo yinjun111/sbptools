@@ -33,10 +33,10 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.1a";
+my $version="0.2";
 
 #v0.1 add --atacseq for cutadapt 
-
+#v0.2 add TF support
 
 my $usage="
 
@@ -58,7 +58,11 @@ Parameters:
 
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
-    --atacseq         Trim adaptor for ATAC-Seq for Nextera instead of Truseq
+      
+    --type            histone, atac, or tf [histone]
+                           histone, default setting for chipseq-process
+                           for atac, cutadapt is defined to trim adaptor for ATAC-Seq for Nextera instead of Truseq
+                           tf, TF ChIP-Seq
 
     Parallel computating parameters
     --core            No. of cores or threads used by each task [4]
@@ -91,8 +95,9 @@ my $outputfolder;
 my $verbose;
 my $tx;
 my $runmode="none";
+my $type="HISTONE";
 my $core=4;
-my $atacseq=0;
+#my $atacseq=0;
 
 GetOptions(
 	"config|c=s" => \$configfile,
@@ -100,10 +105,14 @@ GetOptions(
 	"tx|t=s" => \$tx,	
 	"core=s" => \$core,	
 	"runmode|r=s" => \$runmode,		
-	"atacseq" => \$atacseq,
+	#"atacseq" => \$atacseq,
+	"type" => \$type,
 	"verbose|v" => \$verbose,
 );
 
+
+#upcase $type
+$type=uc $type;
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
@@ -172,6 +181,15 @@ else {
 }
 
 
+my $genomeversion;
+
+if($tx=~/Human.B38/) {
+	$genomeversion="hg38";
+}
+elsif($tx=~/Mouse.B38/) {
+	$genomeversion="mm10";
+}
+		
 ########
 #Process
 ########
@@ -376,11 +394,13 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
 		
-		unless($atacseq) {
-			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
+
+		if ($type eq "ATAC") {
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -n 2 -a GATCGGAAGAGCACACGTCTGAACTCCAGTCAC -b CTGTCTCTTATACACATCT -b AGATGTGTATAAGAGACAG -A GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -B CTGTCTCTTATACACATCT -B AGATGTGTATAAGAGACAG -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";		
 		}
 		else {
-			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -n 2 -a GATCGGAAGAGCACACGTCTGAACTCCAGTCAC -b CTGTCTCTTATACACATCT -b AGATGTGTATAAGAGACAG -A GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -B CTGTCTCTTATACACATCT -B AGATGTGTATAAGAGACAG -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";		
+		#($type eq "HISTONE" || $type eq "TF")
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
 		}
 	}
 }
@@ -402,13 +422,14 @@ else {
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
-		unless($atacseq) {
-			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
-		}
-		else {
+
+		if($type eq "ATAC") {
 			#ATAC-Seq trim nextera
 			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -n 2 -a GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -b CTGTCTCTTATACACATCT -b AGATGTGTATAAGAGACAG $fastq1 -o $fastq1trim > $cutadaptlog;";
-		}		
+		}
+		else {
+			$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
+		}
 	}
 }
 		
@@ -503,25 +524,26 @@ foreach my $sample (sort keys %sample2fastq) {
 		#findPeaks
 		#findPeaks WT_1_TagDir/ -style histone -o WT_1_Peaks.txt >& WT_1_Peaks.log
 		
+		my $homerstyle="histone";
+		
+		if($type eq "HISTONE" || $type eq "ATAC") {
+			$homerstyle="histone";
+		}
+		elsif($type eq "TF") {
+			$homerstyle="factor";
+		}
+		
 		if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
 			my $inputsample=$chippedsample2input{$sample2chippedsample{$sample}};
-			$sample2workflow{$sample}.="$findpeaks $outputfolder/$sample/$sample\_TagDir -i $outputfolder/$inputsample/$inputsample\_TagDir -style histone -o $outputfolder/$sample/$sample\_Peaks.txt >& $outputfolder/$sample/$sample\_findpeaks.log;";
+			$sample2workflow{$sample}.="$findpeaks $outputfolder/$sample/$sample\_TagDir -i $outputfolder/$inputsample/$inputsample\_TagDir -style $homerstyle -o $outputfolder/$sample/$sample\_Peaks.txt >& $outputfolder/$sample/$sample\_findpeaks.log;";
 		}
 		else {
-			$sample2workflow{$sample}.="$findpeaks $outputfolder/$sample/$sample\_TagDir -style histone -o $outputfolder/$sample/$sample\_Peaks.txt >& $outputfolder/$sample/$sample\_findpeaks.log;";
+			$sample2workflow{$sample}.="$findpeaks $outputfolder/$sample/$sample\_TagDir -style $homerstyle -o $outputfolder/$sample/$sample\_Peaks.txt >& $outputfolder/$sample/$sample\_findpeaks.log;";
 		}
 
 		#Annotation
 		#annotatePeaks.pl WT_1_Peaks.txt hg38 -gtf /home/jyin/Projects/Databases/Ensembl/v84/Homo_sapiens.GRCh38.84_ucsc.gtf -ann /home/jyin/Projects/Databases/Ensembl/v84/Human_Homer/Homo_sapiens.GRCh38.84_ucsc_anno.txt > WT_1_Peaks_anno2.txt
 
-		my $genomeversion;
-		
-		if($tx=~/Human.B38/) {
-			$genomeversion="hg38";
-		}
-		elsif($tx=~/Mouse.B38/) {
-			$genomeversion="mm10";
-		}
 	
 		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt $genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt 2> $outputfolder/$sample/$sample\_annotatepeaks.log;";
 	}	

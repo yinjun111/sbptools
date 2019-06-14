@@ -13,6 +13,7 @@ use List::Util qw(sum);
 ########
 
 my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
+my $text2excel="perl /apps/sbptools/text2excel/text2excel.pl";
 
 
 
@@ -21,7 +22,7 @@ my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 ########
 
 
-my $version="0.1";
+my $version="0.1a";
 
 my $usage="
 
@@ -34,6 +35,7 @@ Description: Summarize rnaseq-de results and recalculate significance if needed
 2. reformat DE results using union gene lists
 3. report group avg TPM, and FPKM
 4. recalculate significance using new fc or new q
+5. merged excel file for the project
 
 
 Parameters:
@@ -513,6 +515,44 @@ print LOG "Copy gene annotation.\n";
 system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt");
 system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/geneanno_sel.txt");
 
+
+
+
+####
+#Add gene annotation
+####
+
+#gene de merge
+system("$mergefiles -m $outputfolder/rnaseq-summary_GeneDEMerged.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/rnaseq-summary_GeneDEMerged_anno.txt -n T");
+
+#gene sig merge
+system("$mergefiles -m $outputfolder/rnaseq-summary_GeneDESigs.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/rnaseq-summary_GeneDESigs_anno.txt -n T");
+
+#gene fpkm
+system("$mergefiles -m $outputfolder/gene.results.merged.fpkm.sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/gene.results.merged.fpkm.sel_anno.txt -n T");
+
+#gene tpm
+system("$mergefiles -m $outputfolder/gene.results.merged.tpm.sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/gene.results.merged.tpm.sel_anno.txt -n T");
+
+
+#gene fpkm group avg
+system("$mergefiles -m $outputfolder/gene.results.merged.fpkm.groupavg.sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/gene.results.merged.fpkm.groupavg.sel_anno.txt -n T");
+
+
+#gene tpm group avg
+system("$mergefiles -m $outputfolder/gene.results.merged.tpm.groupavg.sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/gene.results.merged.tpm.groupavg.sel_anno.txt -n T");
+
+
+
+####
+#Produce Excel file
+####
+
+#merge the previous files together
+
+my $timestamp=substr($now,0,10);
+
+system("$text2excel -i $outputfolder/rnaseq-summary_GeneDEMerged_anno.txt,$outputfolder/rnaseq-summary_GeneDESigs_anno.txt,$outputfolder/gene.results.merged.fpkm.groupavg.sel_anno.txt,$outputfolder/gene.results.merged.tpm.groupavg.sel_anno.txt -n GeneDE,GeneDESigs,FPKM_Group,TPM_Group -o $outputfolder/rnaseq-summary_all_$timestamp.xlsx --theme theme2");
 
 
 

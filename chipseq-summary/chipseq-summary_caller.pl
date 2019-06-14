@@ -238,6 +238,7 @@ my %folder2dir;
 foreach my $inputfolder (split(",",$inputfolders)) {
 	#print STDERR $inputfolder,"#1\n";
 	my @folders=glob("$inputfolder/*");
+	
 	foreach my $folder (@folders) {
 		if(-d $folder) {
 			#print STDERR $folder,"#2\n";
@@ -276,6 +277,13 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 			}
 		}
 	}
+}
+
+
+unless(keys %folder2allbysignal) {
+	print STDERR "ERROR:No chipseq-de results identifed from --input $inputfolders.\n";
+	print LOG "ERROR:No chipseq-de results identifed from --input $inputfolders.\n";
+	exit;
 }
 
 #print out what were found
@@ -328,8 +336,8 @@ if(defined $fccutoff && length($fccutoff)>0) {
 		
 		foreach my $folder (sort keys %folder2allbysignal) {
 
-			print STDERR "Processing ",$folder2dir{$folder}."/".$folder2allbysignal{$folder},"\n" if $verbose;
-			print LOG "Processing ",$folder2dir{$folder}."/".$folder2allbysignal{$folder},"\n";
+			print STDERR "Processing ",$folder2allbysignal{$folder},"\n" if $verbose;
+			print LOG "Processing ",$folder2allbysignal{$folder},"\n";
 			
 			#my $foripafile="$folder\_GeneDE.foripa.txt";
 			

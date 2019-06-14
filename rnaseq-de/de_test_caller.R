@@ -127,7 +127,6 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 	return(result)
 }
 
-
 volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",ylab="-log10 P",main="Volcano Plot",fc_cutoff=args$fccutoff,q_cutoff=args$q_cutof) {
   
   library(ggplot2)
@@ -177,16 +176,90 @@ volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",y
     scale_fill_manual(name="Color",values = cols) +
     scale_shape_manual(name="Shape",values = shs) +
     theme_bw(base_size = 14) + # change overall theme
-    theme(legend.position = "right",panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + # change the legend
+    theme(legend.position = "right",panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          plot.title = element_text(size = 10, face = "bold",hjust = 0.5),axis.title=element_text(size=8)) + # change the legend
     guides(fill=guide_legend(override.aes = list(size = 3,  colour=cols.sel),title="Significance"),shape="none")+
     xlab(xlab) + # Change X-Axis label
     ylab(ylab) + # Change Y-Axis label
     ylim(ylim) +
     scale_x_continuous(breaks =seq(-5,5,1),lim=xlim) +
     geom_hline(yintercept = -log10(as.numeric(q_cutoff)), colour="#990000", linetype="dashed") + #p cutoff
-    geom_vline(xintercept = as.numeric(fc_cutoff), colour="#990000", linetype="dashed") + geom_vline(xintercept = -as.numeric(fc_cutoff), colour="#990000", linetype="dashed")  # fc cutoff line
+    geom_vline(xintercept = as.numeric(fc_cutoff), colour="#990000", linetype="dashed") + geom_vline(xintercept = -as.numeric(fc_cutoff), colour="#990000", linetype="dashed") + # fc cutoff line
+    annotate("text",x=xlim[2]-0.5, y=ylim[2]-0.5, label=length(which(sig==1)),colour = "red",size = 5) + 
+    annotate("text",x=xlim[1]+0.5, y=ylim[2]-0.5, label=length(which(sig==-1)),colour = "green",size = 5) + 
+    annotate("text",x=xlim[2]-1, y=-log10(as.numeric(q_cutoff))+0.5, label=substring(main,28),colour = "red",size = 3) 
   
 }
+
+
+#to be implemented
+ma_plot_ggplot<-function(m,a,sig,xlim=c(0,20),ylim=c(-5,5),xlab="Log2m",ylab="-log10 P",main="Volcano Plot",m_cutoff=args$mcutoff,a_cutoff=args$a_cutof) {
+  
+  #m is lfc
+  #a is mean
+  
+  library(ggplot2)
+  
+  #a[is.na(a)]<-1 #remove NA
+  
+  m<-as.numeric(unlist(m))
+  a<-as.numeric(unlist(a))
+  
+  #define color  
+  cols <- c("Up" = "red", "Down" = "green","N.S."="grey")
+  shs <- c("21" = 21, "24" = 24)
+  #define col and shape
+  
+  shapes=rep(21,length(m))
+  #shapes[abs(m)>xlim[2]]=24
+  #shapes[-log10(a)>ylim[2]]=24
+  
+  sig.new<-rep("N.S.",length(sig))
+  sig.new[sig==1]="Up"
+  sig.new[sig==-1]="Down"
+  
+  
+  #redefine cols and shs
+  cols.sel<-cols[levels(as.factor(sig.new))]
+  shs.sel<-shs[levels(as.factor(shapes))]
+  
+  #print(cols.sel)
+  #print(shs.sel)
+  
+  #transform data
+  m[m>xlim[2]]=xlim[2]
+  m[m<xlim[1]]=xlim[1]
+  
+  a[-log10(a)>ylim[2]]=10^-ylim[2]
+  
+  #defined cols and shapes
+  
+  data<-data.frame( lm=m,a=-log10(a),sig=sig.new,shape=shapes)
+  
+  
+  #plot
+  vol <- ggplot(data, aes(x = lm, y =a, fill = sig ,shape=factor(shape)))
+  
+  vol + ggtitle(label = main) +
+    geom_point(size = 2, alpha = 1, na.rm = T, colour = "black") +
+    scale_fill_manual(name="Color",values = cols) +
+    scale_shape_manual(name="Shape",values = shs) +
+    theme_bw(base_size = 14) + # change overall theme
+    theme(legend.position = "right",panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          plot.title = element_text(size = 10, face = "bold",hjust = 0.5),axis.title=element_text(size=8)) + # change the legend
+    guides(fill=guide_legend(override.aes = list(size = 3,  colour=cols.sel),title="Significance"),shape="none")+
+    xlab(xlab) + # Change X-Axis label
+    ylab(ylab) + # Change Y-Axis label
+    ylim(ylim) +
+    scale_x_continuous(breaks =seq(-5,5,1),lim=xlim) +
+    geom_hline(yintercept = -log10(as.numeric(a_cutoff)), colour="#990000", linetype="dashed") + #p cutoff
+    geom_vline(xintercept = as.numeric(m_cutoff), colour="#990000", linetype="dashed") + geom_vline(xintercept = -as.numeric(m_cutoff), colour="#990000", linetype="dashed") + # m cutoff line
+    annotate("text",x=xlim[2]-0.5, y=ylim[2]-0.5, label=length(which(sig==1)),colour = "red",size = 5) + 
+    annotate("text",x=xlim[1]+0.5, y=ylim[2]-0.5, label=length(which(sig==-1)),colour = "green",size = 5) + 
+    annotate("text",x=xlim[2]-1, y=-log10(as.numeric(a_cutoff))+0.5, label=substring(main,28),colour = "red",size = 3) 
+  
+}
+
 
 #generate plots
 
@@ -197,7 +270,7 @@ volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",y
 
 
 #####
-#run
+#Statistical test
 #####
 
 
@@ -217,9 +290,21 @@ write.table(data.sel.result$result,file=args$out,sep="\t",quote=F,col.names = NA
 
 save.image(file=rdatafile)
 
-#volcano plot
-vp_outfile=sub("\\.\\w+$","_volcanoplot.pdf",args$out,perl=T)
 
-pdf(vp_outfile)
-volcano_plot_ggplot(fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
+#####
+#Plots
+#####
+
+#volcano plot
+vp_outfile_pdf=sub("\\.\\w+$","_volcanoplot.pdf",args$out,perl=T)
+
+pdf(vp_outfile_pdf,width=7, height=6)
+volcano_plot_ggplot(fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10 ",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
 dev.off()
+
+#turned off for now, no X11 in linux
+#vp_outfile_jpg=sub("\\.\\w+$","_volcanoplot.jpg",args$out,perl=T)
+
+#jpeg(vp_outfile_jpg,width=7, height=6, units="in", res=300) 
+#volcano_plot_ggplot(fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10 ",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
+#dev.off()
