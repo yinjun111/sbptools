@@ -20,8 +20,12 @@ my $findmotifsgenome="$homer/findMotifsGenome.pl";
 my $bed2pos="$homer/bed2pos.pl";
 
 my $intersectbed="/apps/bedtools2-2.26.0/bin/bedtools intersect";
+my $intersect_multi_bed="/home/jyin/Projects/Pipeline/sbptools/motif-finder/intersect_multi_bed.sh";
+
 
 my $motif_intersect_to_txt="/home/jyin/Projects/Pipeline/sbptools/chipseq-summary/motif_intersect_to_txt.pl";
+
+
 
 ########
 #Interface
@@ -138,7 +142,8 @@ my %tx2ref=(
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
 		"genepromoter"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
-		"homermotif"=>"/data/jyin/Databases/Homer/homer.KnownMotifs.hg38.170917_short.bed"},
+		"homermotif"=>"/data/jyin/Databases/Homer/homer.KnownMotifs.hg38.170917_short.bed",
+		"homermotifs"=>"/data/jyin/Databases/Homer/homer.KnownMotifs.hg38.170917/*.bed"},
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
 		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
@@ -161,15 +166,35 @@ elsif($tx=~/Mouse.B38/) {
 }
 
 
-########
-#bed to pos conversion
-########
-
+#######
+#Motif for each peak
+#######
 
 my $inputfilename;
 if($inputfile_basename=~/(.+)\.bed/) {
 	$inputfilename=$1;
 }
+
+
+print STDERR "Identify motifs for $inputfile.\n\n" if $verbose;
+print LOG "Identify motifs for $inputfile.\n\n";
+
+print LOG "cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed\n\n";
+system("cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed");
+
+#intersect bed
+print LOG "$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt\n\n";
+system("$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt");
+
+#summarize result
+print LOG "$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt\n\n";
+system("$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt");
+
+
+
+########
+#bed to pos conversion
+########
 
 print STDERR "Convert $inputfile into $outputfolder/$inputfilename.pos\n\n" if $verbose;
 print LOG "Convert $inputfile into $outputfolder/$inputfilename.pos\n\n";
@@ -195,24 +220,6 @@ system("$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outpu
 print LOG "rm -R $outputfolder/findmotifsgenome/preparsed\n\n";
 system("rm -R $outputfolder/findmotifsgenome/preparsed");
 
-
-#######
-#Motif for each peak
-#######
-
-print STDERR "Identify motifs for $inputfile.\n\n" if $verbose;
-print LOG "Identify motifs for $inputfile.\n\n";
-
-print LOG "cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed\n\n";
-system("cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed");
-
-#intersect bed
-print LOG "$intersectbed -a $inputfile -b ".$tx2ref{$tx}{"homermotif"}." -wb > $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt\n\n";
-system("$intersectbed -a $inputfile -b ".$tx2ref{$tx}{"homermotif"}." -wb > $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt");
-
-#summarize result
-print LOG "$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt\n\n";
-system("$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt");
 
 
 
