@@ -16,19 +16,22 @@ my $multiqc="/home/jyin/.local/bin/multiqc";
 my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
 
-my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
+my $convertdetobed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_bed.pl";
 my $homer="/home/jyin/Programs/Homer/bin";
-my $findmotifsgenome="$homer/findMotifsGenome.pl";
+#my $findmotifsgenome="$homer/findMotifsGenome.pl";
+
+my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-finder_caller.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.1b";
+my $version="0.2a";
 
 #v0.1a, revised merge.txt title
-#v0.1b, add tfbs
+#v0.2, add tfbs
+#v0.2a, improved tfbs
 
 my $usage="
 
@@ -407,11 +410,18 @@ if(defined $fccutoff && length($fccutoff)>0) {
 				mkdir("$outputfolder/$folder\_deup_tfbs");
 				mkdir("$outputfolder/$folder\_dedown_tfbs");
 				
-				print S1 "$convertdetopos -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.pos;";
+				print S1 "$convertdetobed -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.bed;";
 				#run the three processes in bg
-				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de.pos $genomeversion $outputfolder/$folder\_deboth_tfbs -size given -preparsedDir $outputfolder/$folder\_deboth_tfbs/preparsed &";
-				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_up.pos $genomeversion $outputfolder/$folder\_deup_tfbs -size given -preparsedDir $outputfolder/$folder\_deup_tfbs/preparsed &";
-				print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_down.pos $genomeversion $outputfolder/$folder\_dedown_tfbs -size given -preparsedDir $outputfolder/$folder\_dedown_tfbs/preparsed &";
+				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de.pos $genomeversion $outputfolder/$folder\_deboth_tfbs -size given -preparsedDir $outputfolder/$folder\_deboth_tfbs/preparsed &";
+				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_up.pos $genomeversion $outputfolder/$folder\_deup_tfbs -size given -preparsedDir $outputfolder/$folder\_deup_tfbs/preparsed &";
+				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_down.pos $genomeversion $outputfolder/$folder\_dedown_tfbs -size given -preparsedDir $outputfolder/$folder\_dedown_tfbs/preparsed &";
+				
+				
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de.bed -o $outputfolder/$folder\_deboth_tfbs/ -t $tx &";
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_up.bed -o $outputfolder/$folder\_deup_tfbs/ -t $tx &";
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_down.bed -o $outputfolder/$folder\_dedown_tfbs/ -t $tx &";
+				
+				
 				print S1 "\n";
 			}
 	

@@ -62,7 +62,7 @@ Parameters:
     --type            histone, atac, or tf [histone]
                            histone, default setting for chipseq-process
                            for atac, cutadapt is defined to trim adaptor for ATAC-Seq for Nextera instead of Truseq
-                           tf, TF ChIP-Seq
+                           tf, Transcription Factor ChIP-Seq
 
     Parallel computating parameters
     --core            No. of cores or threads used by each task [4]
@@ -106,7 +106,7 @@ GetOptions(
 	"core=s" => \$core,	
 	"runmode|r=s" => \$runmode,		
 	#"atacseq" => \$atacseq,
-	"type" => \$type,
+	"type=s" => \$type,
 	"verbose|v" => \$verbose,
 );
 
@@ -526,12 +526,17 @@ foreach my $sample (sort keys %sample2fastq) {
 		
 		my $homerstyle="histone";
 		
+		print STDERR $type,"\n";
+		
 		if($type eq "HISTONE" || $type eq "ATAC") {
 			$homerstyle="histone";
 		}
 		elsif($type eq "TF") {
 			$homerstyle="factor";
 		}
+		
+		print STDERR "Using Homer $homerstyle mode.\n\n" if $verbose;
+		print LOG "Using Homer $homerstyle mode.\n\n";
 		
 		if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
 			my $inputsample=$chippedsample2input{$sample2chippedsample{$sample}};

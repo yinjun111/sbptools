@@ -44,14 +44,20 @@ my $params=join(" ",@ARGV);
 ########
 
 
-my $minsamplenum=2;
+
 
 
 ########
 #Process
 ########
 
-my ($infile,$outfile)=@ARGV;
+my ($infile,$outfile,$minsamplenum)=@ARGV;
+
+
+if(!(defined $minsamplenum)) {
+	$minsamplenum=2;
+}
+
 
 open(IN,$infile) || die $!;
 open(OUT,">$outfile") || die $!;

@@ -66,7 +66,7 @@ Parameters:
     --anno|-a         Add annotation
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+    --verbose|-v      Verbose, use -v 0 to turn off verbose [1]
 	
 	
 ";
@@ -95,7 +95,7 @@ my $samplesubset;
 
 my $configfile;
 my $outputfolder;
-my $verbose;
+my $verbose=1;
 my $tx;
 my $runmode="none";
 
@@ -109,7 +109,7 @@ GetOptions(
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
 	"runmode|r=s" => \$runmode,		
-	"verbose|v" => \$verbose,
+	"verbose|v=s" => \$verbose,
 );
 
 
@@ -562,11 +562,25 @@ foreach my $group (sort keys %group2samples) {
 		print S1 "$processmergebed -i $peakfile -o $peakfilerenamed -s $sample;"
 	}
 	
-	#merge bed 
-	print S1 "cat ",join(" ",@renamed)," | sort -k1,1 -k2,2n | bedtools merge -c 4 -o collapse > $mergedbed;";
 	
-	#select reproducible bed
-	print S1 "$selectbed $mergedbed $selectedbed;";
+	
+	if(keys %{$group2samples{$group}} >1) {
+		#for group with biological replicate
+		
+		#merge bed 
+		print S1 "cat ",join(" ",@renamed)," | sort -k1,1 -k2,2n | $mergebed -c 4 -o collapse > $mergedbed;";
+		
+		#select reproducible bed
+		print S1 "$selectbed $mergedbed $selectedbed;";
+	}
+	else {
+		print STDERR "WARNING: $group doesn't have biologial replicate. Only 1 sample ",join(",",sort keys %{$group2samples{$group}})," identified.\n\n";
+		print LOG "WARNING: $group doesn't have biologial replicate. Only 1 sample ",join(",",sort keys %{$group2samples{$group}})," identified.\n\n";
+		
+		print S1 "cut -f 1-4 ",join(",",@renamed)," > $mergedbed;";
+		
+		print S1 "$selectbed $mergedbed $selectedbed 1;";
+	}
 
 	#produce bb
 	print S1 "cat $selectedbed | grep -v \"#\" | sort -k1,1 -k2,2n > $selectedbed_sorted;$bedtobigbed $selectedbed_sorted ".$tx2ref{$tx}{"chrsize"}." $selectedbb;";
