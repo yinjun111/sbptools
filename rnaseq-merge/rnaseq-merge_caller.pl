@@ -14,6 +14,7 @@ use File::Basename qw(basename);
 my $multiqc="/apps/python-3.5.2/bin/multiqc";
 my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 
+my $rnaseqmergefilter="/apps/sbptools/rnaseq-merge/rnaseq-merge_filter.R";
 
 
 ########
@@ -21,7 +22,10 @@ my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2, add filter function to get files for PCA
+
 
 my $usage="
 
@@ -46,6 +50,11 @@ Parameters:
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
     --anno|-a         Add annotation
 
+    --filter          Signal filter [auto]
+                         automatically defined signal cutoff as
+                           Count >= No. of samples * 5
+                         or can define a count number
+						 
     --runmode|-r      Where to run the scripts, local, server or none [none]
     --verbose|-v      Verbose
 	
@@ -74,6 +83,7 @@ my $configfile;
 my $outputfolder;
 my $verbose;
 my $tx;
+my $filter="auto";
 my $runmode="none";
 
 GetOptions(
@@ -82,6 +92,7 @@ GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,	
+	"filter=s" => \$filter,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 );
@@ -121,7 +132,8 @@ if(!-e $tempfolder) {
 
 my $logfile="$outputfolder/rnaseq-merge_run.log";
 
-my $scriptfile1="$scriptfolder/rnaseq-merge_run.sh";
+my $scriptfile1="$scriptfolder/rnaseq-merge_run1.sh";
+my $scriptfile2="$scriptfolder/rnaseq-merge_run2.sh";
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -352,6 +364,7 @@ print S1 "$multiqc -l $tempfolder/samplefolders.txt -o $outputfolder/multiqc;\n"
 
 #------------------
 #may need to implement annotation ...
+#need to implement filter step for PCA ready file
 
 
 #Gene count
@@ -400,9 +413,18 @@ print S1 "\n";
 close S1;
 
 
+#filter for PCA
+open(S2,">$scriptfile2") || die "Error writing $scriptfile2. $!";
+
+print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --fpkm $outputfolder/$genefpkmmerged --tpm $outputfolder/$genetpmmerged --filter $filter;\n";
+print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
+
+close S2;
+
+
 #local mode
-print STDERR "\nTo run locally, in shell type: sh $scriptfile1\n\n";
-print LOG "\nTo run locally, in shell type: sh $scriptfile1\n\n";
+print STDERR "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
+print LOG "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
 
 
 
