@@ -22,9 +22,11 @@ my $bed2pos="perl /apps/homer/bin/bed2pos.pl";
 ########
 
 
-my $version="0.1a";
+my $version="0.2";
 
 #v0.1a change default to 1000 up, 0 down. Included bed2pos convertion
+#v0.2 add nr coords
+
 
 my $usage="
 
@@ -42,7 +44,9 @@ Parameters:
     --out|-o          Output file suffix
                         out_anno.txt
                         out_alltxs.bed
+                        out_alltxs_nr.bed
                         out_longesttxs.bed
+                        out_longesttxs_nr.bed
 	
 ";
 
@@ -86,9 +90,13 @@ GetOptions(
 my $txannofile="$out\_anno.txt";
 my $txallbed="$out\_alltxs.bed";
 my $txlongbed="$out\_longesttxs.bed";
+my $txallbednr="$out\_alltxs_nr.bed";
+my $txlongbednr="$out\_longesttxs_nr.bed";
 
 my $txallpos="$out\_alltxs.pos";
 my $txlongpos="$out\_longesttxs.pos";
+my $txallposnr="$out\_alltxs_nr.pos";
+my $txlongposnr="$out\_longesttxs_nr.pos";
 
 my %gene2tx;
 my %tx2info; #chr, start, end, str
@@ -103,8 +111,8 @@ while(<IN>) {
 	if($array[2] eq "transcript") {
 		my %terms=process_info($array[8]);
 		
-		$gene2tx{$terms{"gene_id"}}{$terms{"transcript_id"}}=$array[4]-$array[3]+1;
-		$tx2info{$terms{"transcript_id"}}=[@array[0,3,4,6]];#chr,start,end,strand
+		$gene2tx{$terms{"gene_id"}}{$terms{"gene_name"}."|".$terms{"transcript_id"}}=$array[4]-$array[3]+1; #length by chr start/end
+		$tx2info{$terms{"gene_name"}."|".$terms{"transcript_id"}}=[@array[0,3,4,6]];#chr,start,end,strand
 	}
 }
 close IN;
@@ -125,6 +133,9 @@ close IN;
 open(OUT1,">$txannofile") || die $!;
 open(OUT2,">$txallbed") || die $!;
 open(OUT3,">$txlongbed") || die $!;
+
+my %coord2tx_long;
+my %coord2tx_all;
 
 print OUT1 "Tx\tGene\tChr\tStart\tEnd\tStr\tPromoterStart_Up${upstream}Down$downstream\tPromoterEnd_Up${upstream}Down$downstream\tLengthRank\n";
 foreach my $gene (sort keys %gene2tx) {
@@ -149,7 +160,10 @@ foreach my $gene (sort keys %gene2tx) {
 		
 		if($num==0) {
 			print OUT3 $tx2info{$tx}[0],"\t$upcoord\t$downcoord\t$tx\t.\t",$tx2info{$tx}[3],"\n";
+			$coord2tx_long{$tx2info{$tx}[0].",".$upcoord.",".$downcoord.",".$tx2info{$tx}[3]}{$tx}++;
 		}
+		
+		$coord2tx_all{$tx2info{$tx}[0].",".$upcoord.",".$downcoord.",".$tx2info{$tx}[3]}{$tx}++;
 		
 		print OUT2 $tx2info{$tx}[0],"\t$upcoord\t$downcoord\t$tx\t.\t",$tx2info{$tx}[3],"\n";
 		
@@ -161,6 +175,22 @@ close OUT1;
 close OUT2;
 close OUT3;
 
+#NR coords
+open(OUT4,">$txallbednr") || die $!;
+open(OUT5,">$txlongbednr") || die $!;
+
+foreach my $coord (sort keys %coord2tx_all) {
+	my ($chr,$start,$end,$str)=split(",",$coord);
+	if(defined $coord2tx_long{$coord}) {
+		my $txslong=join(",",sort keys %{$coord2tx_long{$coord}});
+		print OUT5 $chr,"\t$start\t$end\t$txslong\t.\t$str\n";
+	}
+	
+	my $txsall=join(",",sort keys %{$coord2tx_all{$coord}});
+	print OUT4 $chr,"\t$start\t$end\t$txsall\t.\t$str\n";
+}
+close OUT4;
+close OUT5;
 
 
 #convert file format
@@ -169,6 +199,8 @@ print STDERR "\nConverting bed files to pos files\n\n";
 
 system("$bed2pos $txallbed -o $txallpos");
 system("$bed2pos $txlongbed -o $txlongpos");
+system("$bed2pos $txallbednr -o $txallposnr");
+system("$bed2pos $txlongbednr -o $txlongposnr");
 
 
 
