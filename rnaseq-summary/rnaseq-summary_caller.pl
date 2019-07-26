@@ -58,11 +58,13 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+    --runmode|-r      Where to run the scripts, local, server or none [local]
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 	
 	
 ";
+
+#    --verbose|-v      Verbose
 
 
 unless (@ARGV) {
@@ -89,9 +91,10 @@ my $fccutoff;
 my $qcutoff;
 my $geneinput;
 my $txinput;
-my $verbose;
+my $verbose=1;
+my $jobs=5;
 my $tx;
-my $runmode="none";
+my $runmode="local";
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -106,6 +109,7 @@ GetOptions(
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
+	"jobs|j=s" => \$jobs,
 	"verbose|v" => \$verbose,
 );
 
@@ -512,7 +516,9 @@ foreach my $file ("gene.results.merged.fpkm.txt","gene.results.merged.tpm.txt") 
 print STDERR "Copy gene annotation.\n" if $verbose;
 print LOG "Copy gene annotation.\n";
 
-system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt");
+system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt;");
+system("cp ".$tx2ref{$tx}{"txanno"}." $outputfolder/txanno.txt;");
+
 system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/geneanno_sel.txt");
 
 
@@ -615,5 +621,17 @@ sub uniq {
 }
 
 
-
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
+}
 

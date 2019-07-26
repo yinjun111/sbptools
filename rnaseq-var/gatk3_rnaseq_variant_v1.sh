@@ -5,10 +5,11 @@
 #SBP Bioinformatics Core
 #######
 
-version="1.2"
+version="1.3"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
+#version 1.3 remove huge alignment and index files to free up space
 
 #######
 #Usage
@@ -34,6 +35,7 @@ Parameters:
 	Optional
 	-d      Whethter to dedup [T]
 	-f      DP filter [5.0]
+	-k      Keep alignment data [F]
 	
 "
 
@@ -64,6 +66,7 @@ realpath() {
 dedup=T
 species=human
 dpfilter=5.0
+keepalignment=F
 
 #receive options
 while getopts ":i:o:s:d:f:" opt; do
@@ -83,7 +86,10 @@ while getopts ":i:o:s:d:f:" opt; do
       ;;
     f ) 
 		dpfilter=$OPTARG
-      ;;	  
+      ;;
+    k ) 
+		keepalignment=$OPTARG
+      ;;	  	  
     \? ) 
 		printf "ERROR: Unknown options.\n\n$usage"
       ;;
@@ -287,6 +293,21 @@ mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${fastqfilename/.fa
 
 #reformat snpeff ANN column
 perl $reformatsnpeffvcf $outfolder/snpanno/${fastqfilename/.fastq.gz/.output.filtered.snpeff.sift.annotated.vcf} $outfolder/snpanno/${fastqfilename/.fastq.gz/.output.filtered.snpeff.sift.annotated.edited.txt}
+
+
+######
+#Step 9
+######
+
+#clean up to free disk space
+#if don't free up, it will take ~40G per sample, after that, about 4G per sample
+
+if [ "$keepalignment" == "F" ]
+then
+	rm $outfolder/alignment/*/*.sam
+	rm $outfolder/alignment/2pass_genomeDir/SA*
+	rm $outfolder/alignment/2pass_genomeDir/Genome
+fi
 
 
 

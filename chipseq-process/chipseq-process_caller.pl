@@ -33,10 +33,11 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.2";
+my $version="0.3";
 
 #v0.1 add --atacseq for cutadapt 
 #v0.2 add TF support
+#v0.3 add runmode
 
 my $usage="
 
@@ -65,15 +66,16 @@ Parameters:
                            tf, Transcription Factor ChIP-Seq
 
     Parallel computating parameters
-    --core            No. of cores or threads used by each task [4]
-    --task            No. of tasks for parallel computing [4]
+    --core            No. of cores or threads used by each job [4]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+    --jobs|-j         Number of jobs to be paralleled. By default 4 jobs. [4]
+
 	
 	
 ";
 
+#--verbose|-v      Verbose, use -v 0 to turn off verbose [1]
 
 unless (@ARGV) {
 	print STDERR $usage;
@@ -92,11 +94,12 @@ my $params=join(" ",@ARGV);
 
 my $configfile;
 my $outputfolder;
-my $verbose;
+my $verbose=1;
 my $tx;
 my $runmode="none";
 my $type="HISTONE";
 my $core=4;
+my $jobs=4;
 #my $atacseq=0;
 
 GetOptions(
@@ -106,6 +109,7 @@ GetOptions(
 	"core=s" => \$core,	
 	"runmode|r=s" => \$runmode,		
 	#"atacseq" => \$atacseq,
+	"jobs|j=s" => \$jobs,	
 	"type=s" => \$type,
 	"verbose|v" => \$verbose,
 );
@@ -138,6 +142,8 @@ my $scriptfile2="$scriptfolder/chipseq-processs_run2.sh";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
+
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -591,21 +597,58 @@ close S1;
 close S2;
 
 
-#local mode
-if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
-	print STDERR "To run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
-	print LOG "To run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
+
+#######
+#Run mode
+#######
+
+
+my $jobnumber=0;
+my $jobname="chipseq-process-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
 }
 else {
-	print STDERR "To run locally, in shell type: sh $scriptfile1\n\n";
-	print LOG "To run locally, in shell type: sh $scriptfile1\n\n";
+	$jobnumber=$jobs;
 }
 
 
-#whether to run it instantly
-if($runmode eq "local") {
-	system("sh $scriptfile1");
+
+my $localcommand;
+
+
+if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
+	$localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
 }
+else {
+	$localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+}
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+elsif($runmode eq "server") {
+	#server mode
+	
+	#implement for firefly later
+}
+
+
 
 
 close LOG;
@@ -634,6 +677,20 @@ sub get_homer_version {
 
 	return("homer   v4.10.3");
 
+}
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
 }
 
 

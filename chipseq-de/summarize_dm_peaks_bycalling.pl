@@ -18,7 +18,10 @@ my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2, add treatment and reference option
+
 
 my $usage="
 
@@ -35,10 +38,10 @@ Mandatory Parameters:
     --out1|--o1       Output file1, annotated peak calling summary
     --out2|--o2       Output file2, summary of up,down,ns
 	
-    --tx|-t           Transcriptome version, Human.B38.Ensembl84 or Mouse.B38.Ensembl84
-	
-    --fccutoff        Log2 FC cutoff [1]
-    --qcutoff         Corrected P cutoff [0.05]
+    --tx              Transcriptome version, Human.B38.Ensembl84 or Mouse.B38.Ensembl84
+
+    --treatment|-t    Treatment group name
+    --reference|-r    Reference group name
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
     --verbose|-v      Verbose
@@ -66,6 +69,8 @@ my ($infile,$annofile,$outfile1,$outfile2);
 my $verbose=1;
 my $tx;
 my $runmode="none";
+my $treatment;
+my $reference;
 
 GetOptions(
 	"in|i=s" => \$infile,
@@ -75,6 +80,9 @@ GetOptions(
 	"out2|o2=s" => \$outfile2,
 	
 	"tx|t=s" => \$tx,	
+
+	"treatment=s" => \$treatment,
+	"reference=s" => \$reference,
 	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
@@ -133,27 +141,65 @@ my %peak2sig;
 
 my $ilinenum=0;
 my $ititle;
+my %sample2pos;
+my @selsamplepos;
 
 open(IN,$infile) || die $!;
+#infile: "resultbycalling"=> "all.reprod.peak.merged.summary.txt"
+
 while(<IN>) {
 
 	tr/\r\n//d;
 	my @array=split/\t/;
 	
 	if($ilinenum==0) {
-		$ititle=$_;
+
 		
-		$ititle.="\tSignificance by Peak Calling:$array[1] vs $array[2]";
+		for(my $num=1;$num<=(@array-1)/2;$num++) {
+			if($array[$num]=~/(.+)_reprod.bed/) {
+				$sample2pos{$1}=$num;
+			}
+		}
+		
+		print STDERR join(",",sort keys %sample2pos)," samples are defined in $infile.\n\n";
+		
+		#treatment, ref
+		
+		if(defined $sample2pos{$treatment}) {
+			push @selsamplepos,$sample2pos{$treatment};
+		}
+		else {
+			print STDERR "ERROR:--treatment $treatment not defined in $infile.\n\n";
+			exit;
+		}
+		
+		if(defined $sample2pos{$reference}) {
+			push @selsamplepos,$sample2pos{$reference};
+		}
+		else {
+			print STDERR "ERROR:--reference $reference not defined in $infile.\n\n";
+			exit;
+		}
+		
+		print STDERR "$treatment, $reference are identfied in columns ",join(",",map {$_+1} @selsamplepos),"\n";
+		
+		
+		$ititle=join("\t",@array[0,@selsamplepos,map {$_+ (@array-1)/2} @selsamplepos]);		
+		
+		$ititle.="\tSignificance by Peak Calling:$treatment vs $reference";
 	}
 	else {
-		$peak2info{$array[0]}=$_;
+		$peak2info{$array[0]}=join("\t",@array[0,@selsamplepos,map {$_+ (@array-1)/2} @selsamplepos]);
 				
 		my $sig;	
 		#called in first, 1, in second, -1, both, 0
-		if($array[1]>0 && $array[2] ==0) {
+		
+		#treatment vs reference 
+		
+		if($array[$selsamplepos[0]]>0 && $array[$selsamplepos[1]] ==0) {
 			$sig=1;
 		}
-		elsif($array[1]==0 && $array[2] >0) {
+		elsif($array[$selsamplepos[0]]==0 && $array[$selsamplepos[1]] >0) {
 			$sig=-1;
 		}
 		else {
@@ -175,6 +221,8 @@ my %cates;
 my $linenum=0;
 open(IN,$annofile) || die $!;
 open(OUT1,">$outfile1") || die $!;
+#"resultbycallinganno"=> "all.reprod.peak.merged.dm.bycalling.anno.txt",
+
 while(<IN>) {
 	tr/\r\n//d;
 	if ($linenum==0) {
@@ -237,6 +285,7 @@ my @cates=("Intergenic","TTS","exon","intron","promoter-TSS");
 
 
 open(OUT,">$outfile2") || die $!;
+#"summarybycalling"=> "all.reprod.peak.merged.dm.bycalling.summary.txt",
 
 #1> -1 > 0
 

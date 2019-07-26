@@ -74,7 +74,7 @@ Optional Parameters:
     --qcutoff         Corrected P cutoff [0.05]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 	
 ";
 
@@ -128,6 +128,7 @@ my $qcutoff=0.05;
 my $verbose=1;
 my $tx;
 my $runmode="none";
+my $jobs=5;
 
 GetOptions(
 	"in|i=s" => \$inputfolder,
@@ -148,6 +149,7 @@ GetOptions(
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
+	"jobs|j=s" => \$jobs,
 	"verbose|v" => \$verbose,
 );
 
@@ -176,6 +178,8 @@ my $scriptfile1="$scriptfolder/chipseq-de_run.sh";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
+
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -486,13 +490,16 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
 
 foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
-	#Gene
+	
+	#DE by Signal ...
 	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"selected"}," -a $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
 
 	#summary and annotation 
 	
 	if($attr eq "all") {
+	
+		#DE by Signal, annotation
 		#Gene anno
 		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"result"}," -i $outputfolder/",$chipseq2files{$attr}{"anno"}," -o $outputfolder/",$chipseq2files{$attr}{"resultanno"},";";
 		
@@ -504,18 +511,19 @@ foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 		
 		print S1 "\n";
 		
+		
 		#DE by peak calling ...
-		print S1 "$desummarybycalling -i $inputfolder/",$chipseq2files{$attr}{"resultbycalling"}," --tx $tx --o1 $outputfolder/",$chipseq2files{$attr}{"resultbycallinganno"}," --o2 $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -a $inputfolder/",$chipseq2files{$attr}{"raw"},";";		
+		print S1 "$desummarybycalling -i $inputfolder/",$chipseq2files{$attr}{"resultbycalling"}," --treatment $treatment --reference $reference --tx $tx --o1 $outputfolder/",$chipseq2files{$attr}{"resultbycallinganno"}," --o2 $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -a $inputfolder/",$chipseq2files{$attr}{"raw"}," >> $logfile 2>&1   ;";		#need to add ref and treat
 		
 		print S1 "$mergefiles -m $outputfolder/",$chipseq2files{$attr}{"summarybycalling"}," -i ",$tx2ref{$tx}{"geneanno"}," -o $outputfolder/",$chipseq2files{$attr}{"summarybycallinganno"},";";
 		
 		
-		#TFBS
-		print S1 "$convertdetopos -i $outputfolder/",$chipseq2files{$attr}{"result"}," -o $outputfolder/",$chipseq2files{$attr}{"depos"},";";
+		#TFBS for DM by Signal #didn't work ....
+		#print S1 "$convertdetopos -i $outputfolder/",$chipseq2files{$attr}{"result"}," -o $outputfolder/",$chipseq2files{$attr}{"depos"},";";
 		#run the three processes in bg
-		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"depos"}," $genomeversion $outputfolder/deboth_tfbs -size given &";
-		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposup"}," $genomeversion $outputfolder/deup_tfbs -size given &";
-		print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposdown"}," $genomeversion $outputfolder/dedown_tfbs -size given &";
+		#print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"depos"}," $genomeversion $outputfolder/deboth_tfbs -size given &";
+		#print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposup"}," $genomeversion $outputfolder/deup_tfbs -size given &";
+		#print S1 "$findmotifsgenome $outputfolder/",$chipseq2files{$attr}{"deposdown"}," $genomeversion $outputfolder/dedown_tfbs -size given &";
 		
 		print S1 "\n";	
 	}
@@ -529,14 +537,45 @@ foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 close S1;
 
 
-#local mode
-print STDERR "To run locally, in shell type: sh $scriptfile1\n\n";
-print LOG "To run locally, in shell type: sh $scriptfile1\n\n";
 
 
-#whether to run it instantly
-if($runmode eq "local") {
-	system("sh $scriptfile1");
+#######
+#Run mode
+#######
+
+my $jobnumber=0;
+my $jobname="chipseq-de-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$jobs;
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+elsif($runmode eq "server") {
+	#server mode
+	
+	#implement for firefly later
 }
 
 
@@ -560,7 +599,19 @@ sub getsysoutput {
 
 
 
-
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
+}
 
 
 

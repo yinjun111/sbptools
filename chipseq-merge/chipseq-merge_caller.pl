@@ -35,9 +35,10 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.2";
+my $version="0.3";
 
 #v0.2 now skips input samples for merging
+#v0.3, removed -v, add -r implementation for local
 
 
 my $usage="
@@ -66,11 +67,12 @@ Parameters:
     --anno|-a         Add annotation
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose, use -v 0 to turn off verbose [1]
-	
-	
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+
+
 ";
 
+#    --verbose|-v      Verbose, use -v 0 to turn off verbose [1]
 
 unless (@ARGV) {
 	print STDERR $usage;
@@ -98,6 +100,7 @@ my $outputfolder;
 my $verbose=1;
 my $tx;
 my $runmode="none";
+my $jobs=5;
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -108,6 +111,7 @@ GetOptions(
 	"samplesubset|sss=s" => \$samplesubset,		
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
+	"jobs|j=s" => \$jobs,
 	"runmode|r=s" => \$runmode,		
 	"verbose|v=s" => \$verbose,
 );
@@ -162,6 +166,7 @@ my $newconfigfile="$outputfolder/chipseq-merge_config.txt";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -489,6 +494,10 @@ if( scalar(@samples_array) != scalar(keys %sample2tagdir) ) {
 #Print out commands, for local and server run
 ########
 
+
+
+
+
 open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
 
@@ -504,6 +513,7 @@ foreach my $sample (@samples_array,@inputsamples_array) {
 	print OUT $sample2folder{$sample},"\n";
 }
 close OUT;
+
 
 print S1 "$multiqc -l $tempfolder/samplefolders.txt -o $outputfolder/multiqc;\n";
 
@@ -560,6 +570,7 @@ foreach my $group (sort keys %group2samples) {
 		push @renamed, $peakfilerenamed;
 		
 		print S1 "$processmergebed -i $peakfile -o $peakfilerenamed -s $sample;"
+		#output is all.reprod.peak.merged.summary.txt
 	}
 	
 	
@@ -590,6 +601,8 @@ foreach my $group (sort keys %group2samples) {
 
 	print S1 "\n";
 }
+
+
 
 close S1;
 
@@ -622,13 +635,51 @@ print S2 "\n";
 
 close S2;
 
-#local mode
-print STDERR "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
-print LOG "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
 
 
+
+#######
+#Run mode
+#######
+
+my $jobnumber=0;
+my $jobname="chipseq-merge-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$jobs;
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+elsif($runmode eq "server") {
+	#server mode
+	
+	#implement for firefly later
+}
 
 close LOG;
+
+
 ########
 #Functions
 ########
@@ -636,6 +687,20 @@ close LOG;
 sub current_time {
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 	my $now = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	return $now;
+}
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
 	return $now;
 }
 

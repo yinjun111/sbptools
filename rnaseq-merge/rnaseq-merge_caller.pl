@@ -22,9 +22,10 @@ my $rnaseqmergefilter="/apps/sbptools/rnaseq-merge/rnaseq-merge_filter.R";
 ########
 
 
-my $version="0.2";
+my $version="0.3";
 
 #v0.2, add filter function to get files for PCA
+#v0.3, removed -v, add -r implementation for local
 
 
 my $usage="
@@ -54,13 +55,15 @@ Parameters:
                          automatically defined signal cutoff as
                            Count >= No. of samples * 5
                          or can define a count number
-						 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+
+
 	
+    --runmode|-r      Where to run the scripts, local, server or none [none]
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 	
 ";
 
+#    --verbose|-v      Verbose
 
 unless (@ARGV) {
 	print STDERR $usage;
@@ -81,8 +84,9 @@ my $inputfolders;
 
 my $configfile;
 my $outputfolder;
-my $verbose;
+my $verbose=1;
 my $tx;
+my $jobs=5;
 my $filter="auto";
 my $runmode="none";
 
@@ -92,7 +96,8 @@ GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,	
-	"filter=s" => \$filter,	
+	"filter=s" => \$filter,
+	"jobs|j=s" => \$jobs,
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 );
@@ -139,6 +144,8 @@ my $scriptfile2="$scriptfolder/rnaseq-merge_run2.sh";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
+
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -149,10 +156,32 @@ print LOG "\n";
 
 #test tx option
 
+#my %tx2ref=(
+#	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_STAR/Human_RSEM",
+#	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_STAR/Mouse_RSEM",
+#);
+
+
+
 my %tx2ref=(
-	"Human.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Human_STAR/Human_RSEM",
-	"Mouse.B38.Ensembl84"=>"/home/jyin/Projects/Databases/Ensembl/v84/Mouse_STAR/Mouse_RSEM",
+	"Human.B38.Ensembl84"=> { 
+		"star"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
+	"Mouse.B38.Ensembl84"=>{ 
+		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
+
 
 
 if(defined $tx2ref{$tx}) {
@@ -366,6 +395,10 @@ print S1 "$multiqc -l $tempfolder/samplefolders.txt -o $outputfolder/multiqc;\n"
 #may need to implement annotation ...
 #need to implement filter step for PCA ready file
 
+#copy gene annotation
+print S1 "cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt;";
+print S1 "cp ".$tx2ref{$tx}{"txanno"}." $outputfolder/txanno.txt;";
+
 
 #Gene count
 print S1 "$mergefiles -m $tempfolder/genes.txt -i ",join(",",@genefiles)," -l 5 -o $tempfolder/$genecountmerged\_wrongtitle;";
@@ -422,13 +455,50 @@ print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm
 close S2;
 
 
-#local mode
-print STDERR "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
-print LOG "\nTo run locally, in shell type: sh $scriptfile1;sh $scriptfile2\n\n";
 
 
+#######
+#Run mode
+#######
+
+my $jobnumber=0;
+my $jobname="rnaseq-merge-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$jobs;
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+elsif($runmode eq "server") {
+	#server mode
+	
+	#implement for firefly later
+}
 
 close LOG;
+
+
 ########
 #Functions
 ########
@@ -436,6 +506,20 @@ close LOG;
 sub current_time {
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 	my $now = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	return $now;
+}
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
 	return $now;
 }
 

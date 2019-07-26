@@ -27,11 +27,13 @@ my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-f
 ########
 
 
-my $version="0.2a";
+my $version="0.3";
 
 #v0.1a, revised merge.txt title
 #v0.2, add tfbs
 #v0.2a, improved tfbs
+#v0.3, add runmode
+
 
 my $usage="
 
@@ -50,12 +52,6 @@ Parameters:
     --in|-i           Input folder(s)
     --output|-o       Output folder
 
-    #--config|-c       Configuration file match the samples in the chipseq-merge folder
-                           first column as sample name.
-    #--group|-g        Group name in config file for avg calculation
-
-    #--chipseq-merge    chipseq-merge folder to retrieve TPM/FPKM data
-
     --fccutoff        Log2 FC cutoff, optional
     --qcutoff         Corrected P cutoff, optional
 
@@ -65,12 +61,18 @@ Parameters:
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 	
 	
 ";
 
+#--config|-c       Configuration file match the samples in the chipseq-merge folder
+#					   first column as sample name.
+#--group|-g        Group name in config file for avg calculation
 
+#--chipseq-merge    chipseq-merge folder to retrieve TPM/FPKM data
+	
+	
 unless (@ARGV) {
 	print STDERR $usage;
 	exit;
@@ -100,7 +102,7 @@ my $tx;
 my $tfbs="F";
 my $pcol=4; #hidden param
 my $runmode="none";
-
+my $jobs=5;
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -116,7 +118,8 @@ GetOptions(
 	"tfbs=s"=> \$tfbs,
 	
 	"tx|t=s" => \$tx,	
-	"runmode|r=s" => \$runmode,		
+	"runmode|r=s" => \$runmode,	
+	"jobs|j=s" => \$jobs,	
 	"verbose|v" => \$verbose,
 );
 
@@ -149,6 +152,8 @@ my $logfile="$outputfolder/chipseq-summary_run.log";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
+
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -410,19 +415,21 @@ if(defined $fccutoff && length($fccutoff)>0) {
 				mkdir("$outputfolder/$folder\_deup_tfbs");
 				mkdir("$outputfolder/$folder\_dedown_tfbs");
 				
-				print S1 "$convertdetobed -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.bed;";
+				#change the implementation, so that it can be better paralleled
+				system("$convertdetobed -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.bed;");
 				#run the three processes in bg
+
 				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de.pos $genomeversion $outputfolder/$folder\_deboth_tfbs -size given -preparsedDir $outputfolder/$folder\_deboth_tfbs/preparsed &";
 				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_up.pos $genomeversion $outputfolder/$folder\_deup_tfbs -size given -preparsedDir $outputfolder/$folder\_deup_tfbs/preparsed &";
 				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_down.pos $genomeversion $outputfolder/$folder\_dedown_tfbs -size given -preparsedDir $outputfolder/$folder\_dedown_tfbs/preparsed &";
+				#print S1 "\n";				
+				
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de.bed -o $outputfolder/$folder\_deboth_tfbs/ -t $tx;\n";
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_up.bed -o $outputfolder/$folder\_deup_tfbs/ -t $tx;\n";
+				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_down.bed -o $outputfolder/$folder\_dedown_tfbs/ -t $tx;\n";
 				
 				
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de.bed -o $outputfolder/$folder\_deboth_tfbs/ -t $tx &";
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_up.bed -o $outputfolder/$folder\_deup_tfbs/ -t $tx &";
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_down.bed -o $outputfolder/$folder\_dedown_tfbs/ -t $tx &";
-				
-				
-				print S1 "\n";
+
 			}
 	
 			#redefine sum file
@@ -522,7 +529,54 @@ system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt");
 #system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/geneanno_sel.txt");
 
 
+
+#######
+#Run mode
+#######
+
+
+if($tfbs eq "T") {
+	my $jobnumber=0;
+	my $jobname="chipseq-summary-$timestamp";
+
+	if($jobs eq "auto") {
+		$jobnumber=0;
+	}
+	else {
+		$jobnumber=$jobs;
+	}
+
+	my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+
+
+	if($runmode eq "none") {
+		print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+		print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	}
+	elsif($runmode eq "local") {
+		#local mode
+		
+		#need to replace with "sbptools queuejob" later
+
+		system($localcommand);
+		print LOG "$localcommand;\n\n";
+
+		print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+		print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+		
+	}
+	elsif($runmode eq "server") {
+		#server mode
+		
+		#implement for firefly later
+	}
+
+}
+
 close LOG;
+
+
+
 ########
 #Functions
 ########
@@ -572,6 +626,21 @@ sub uniq {
 	}
 	
 	return sort keys %hash;
+}
+
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
 }
 
 

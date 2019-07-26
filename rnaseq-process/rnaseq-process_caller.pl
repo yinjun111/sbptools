@@ -23,11 +23,12 @@ my $bamcoverage="/apps/python-3.5.2/bin/bamCoverage";
 ########
 
 
-my $version="0.2d";
+my $version="0.3";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
 #0.2d correct bug for PE
+#0.3 add runmode, always show -v
 
 my $usage="
 
@@ -50,12 +51,13 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
+    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --verbose|-v      Verbose
-	
-	
+    
 ";
 
+#--verbose|-v      Verbose
 
 unless (@ARGV) {
 	print STDERR $usage;
@@ -74,14 +76,16 @@ my $params=join(" ",@ARGV);
 
 my $configfile;
 my $outputfolder;
-my $verbose;
+my $verbose=1;
 my $tx;
+my $jobs=5;
 my $runmode="none";
 
 GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
-	"tx|t=s" => \$tx,	
+	"tx|t=s" => \$tx,
+	"jobs|j=s" => \$jobs,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 );
@@ -109,6 +113,7 @@ my $scriptfile1="$scriptfolder/rnaseq-process_run.sh";
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -398,14 +403,43 @@ foreach my $sample (sort keys %sample2workflow) {
 close S1;
 
 
-#local mode
-print STDERR "To run locally, in shell type: sh $scriptfile1\n\n";
-print LOG "To run locally, in shell type: sh $scriptfile1\n\n";
+#######
+#Run mode
+#######
+
+my $jobnumber=0;
+my $jobname="rnaseq-process-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$jobs;
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
 
 
-#whether to run it instantly
-if($runmode eq "local") {
-	system("sh $scriptfile1");
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+elsif($runmode eq "server") {
+	#server mode
+	
+	#implement for firefly later
 }
 
 
@@ -428,7 +462,19 @@ sub getsysoutput {
 }
 
 
-
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
+}
 
 
 
