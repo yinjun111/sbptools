@@ -5,11 +5,13 @@
 #SBP Bioinformatics Core
 #######
 
-version="1.3"
+version="1.3a"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
 #version 1.3 remove huge alignment and index files to free up space
+#v1.3a, add -f to tabix
+
 
 #######
 #Usage
@@ -270,10 +272,10 @@ eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T VariantFiltration -R $genom
 printf "tabix indexing\n"  | tee -a  $logfile #steps after step 7 are for snpsift/snpEff analysis
 
 #zip vcf file
-$bgzip $outfolder/gatk3/${fastqfilename/.fastq.gz/.output.filtered.vcf} >> $logfile 2>&1
+$bgzip -f $outfolder/gatk3/${fastqfilename/.fastq.gz/.output.filtered.vcf} >> $logfile 2>&1
 
 #index vcf
-$tabix -p vcf $outfolder/gatk3/${fastqfilename/.fastq.gz/.output.filtered.vcf.gz} >> $logfile 2>&1
+$tabix -f -p vcf $outfolder/gatk3/${fastqfilename/.fastq.gz/.output.filtered.vcf.gz} >> $logfile 2>&1
 
 #steps after step 7 are for snpsift/snpEff analysis
 printf "snpsift/snpeff annotating\n"  | tee -a  $logfile 

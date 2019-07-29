@@ -51,7 +51,7 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+    --jobs|-j         Number of jobs to be paralleled. By default 3 jobs. [3]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
     
@@ -78,7 +78,7 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
-my $jobs=5;
+my $jobs=3;
 my $runmode="none";
 
 GetOptions(
@@ -366,7 +366,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		my $rsemlog="$samplefolder/$sample\_rsem.log";
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog;";
+		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
 		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
 	}
@@ -380,8 +380,9 @@ else {
 	
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
+		my $rsemlog="$samplefolder/$sample\_rsem.log";
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample;";
+		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
 		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
 	}
