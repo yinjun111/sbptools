@@ -35,10 +35,11 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.3";
+my $version="0.31";
 
 #v0.2 now skips input samples for merging
 #v0.3, removed -v, add -r implementation for local
+#v0.31, solves screen envinroment problem
 
 
 my $usage="
@@ -652,7 +653,7 @@ else {
 	$jobnumber=$jobs;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
 
 
 if($runmode eq "none") {

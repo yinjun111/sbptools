@@ -27,10 +27,11 @@ my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 ########
 
 
-my $version="0.3";
+my $version="0.31";
 
 #version 0.2a, add r version log
 #v0.3 add runmode
+#v0.31, solves screen envinroment problem
 
 my $usage="
 
@@ -523,7 +524,7 @@ else {
 	$jobnumber=$jobs;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
 
 
 if($runmode eq "none") {

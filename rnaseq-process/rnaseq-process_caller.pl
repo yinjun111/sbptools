@@ -23,12 +23,13 @@ my $bamcoverage="/apps/python-3.5.2/bin/bamCoverage";
 ########
 
 
-my $version="0.3";
+my $version="0.31";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
 #0.2d correct bug for PE
 #0.3 add runmode, always show -v
+#v0.31, solves screen envinroment problem
 
 my $usage="
 
@@ -51,7 +52,7 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --jobs|-j         Number of jobs to be paralleled. By default 3 jobs. [3]
+    --jobs|-j         Number of jobs to be paralleled. By default 4 jobs. [4]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
     
@@ -78,7 +79,7 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
-my $jobs=3;
+my $jobs=4;
 my $runmode="none";
 
 GetOptions(
@@ -297,7 +298,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
 
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog;";
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog 2>&1;";
 	}
 }
 else {
@@ -318,7 +319,7 @@ else {
 		$fastq1trim=~s/\.fastq\.gz/_trimmed.fastq.gz/;
 		push @{$sample2fastq{$sample}},$fastq1trim;
 
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog;";
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog 2>&1;";
 	}
 }
 		
@@ -418,7 +419,7 @@ else {
 	$jobnumber=$jobs;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
 
 
 if($runmode eq "none") {

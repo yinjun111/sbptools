@@ -33,11 +33,12 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.3";
+my $version="0.31";
 
 #v0.1 add --atacseq for cutadapt 
 #v0.2 add TF support
 #v0.3 add runmode
+#v0.31, solves screen envinroment problem
 
 my $usage="
 
@@ -619,10 +620,10 @@ my $localcommand;
 
 
 if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
-	$localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+	$localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
 }
 else {
-	$localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+	$localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
 }
 
 

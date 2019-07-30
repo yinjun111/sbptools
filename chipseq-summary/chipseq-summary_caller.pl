@@ -27,12 +27,13 @@ my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-f
 ########
 
 
-my $version="0.3";
+my $version="0.31";
 
 #v0.1a, revised merge.txt title
 #v0.2, add tfbs
 #v0.2a, improved tfbs
 #v0.3, add runmode
+#v0.31, solves screen envinroment problem
 
 
 my $usage="
@@ -546,7 +547,7 @@ if($tfbs eq "T") {
 		$jobnumber=$jobs;
 	}
 
-	my $localcommand="screen -S $jobname -dm bash -c \"cat $scriptfile1 | parallel -j $jobnumber;\"";
+	my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
 
 
 	if($runmode eq "none") {
