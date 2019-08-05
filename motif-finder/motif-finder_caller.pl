@@ -20,11 +20,8 @@ my $findmotifsgenome="$homer/findMotifsGenome.pl";
 my $bed2pos="$homer/bed2pos.pl";
 
 my $intersectbed="/apps/bedtools2-2.26.0/bin/bedtools intersect";
-my $intersect_multi_bed="/home/jyin/Projects/Pipeline/sbptools/motif-finder/intersect_multi_bed.sh";
-
-
-my $motif_intersect_to_txt="/home/jyin/Projects/Pipeline/sbptools/chipseq-summary/motif_intersect_to_txt.pl";
-
+my $intersect_multi_bed="/apps/sbptools/motif-finder/intersect_multi_bed.sh";
+my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.pl";
 
 
 ########
@@ -32,9 +29,10 @@ my $motif_intersect_to_txt="/home/jyin/Projects/Pipeline/sbptools/chipseq-summar
 ########
 
 
-my $version="0.11";
+my $version="0.12";
 
 #v0.11, add mouse motifs
+#v0.12, update script directory
 
 my $usage="
 

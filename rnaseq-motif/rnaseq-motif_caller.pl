@@ -12,10 +12,10 @@ use List::Util qw(sum);
 #Prerequisites
 ########
 
-#my $motiffinder="perl /apps/sbptools/motif-finder/motif-finder_caller.pl";
+my $motiffinder="perl /apps/sbptools/motif-finder/motif-finder_caller.pl";
 
 #Dev version
-my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-finder_caller.pl";
+#my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-finder_caller.pl";
 
 
 ########
@@ -46,8 +46,8 @@ Parameters:
     --up              Upstream region length (not implemeted yet) [1000]
     --down            Downstream region length (not implemeted yet) [100]
 
-    --promoter        alltx,longesttx,detx [1000]
-    --de              both,up,down [100]
+    --promoter        alltx,longesttx,detx [alltx,longesttx]
+    --de              both,up,down [both]
 
     --out|-o          Output folder
 	
@@ -356,12 +356,12 @@ elsif(defined $genede && length($genede)>0) {
 		my @array=split/\t/;
 		
 		if($array[5] eq "1") {
-			$genes_de{"up"}{$_}++;
-			$genes_de{"both"}{$_}++;
+			$genes_de{"up"}{$array[0]}++;
+			$genes_de{"both"}{$array[0]}++;
 		}
 		elsif($array[5] eq "-1") {
-			$genes_de{"down"}{$_}++;
-			$genes_de{"both"}{$_}++;
+			$genes_de{"down"}{$array[0]}++;
+			$genes_de{"both"}{$array[0]}++;
 		}
 	}
 	close IN;
@@ -370,7 +370,9 @@ elsif(defined $genede && length($genede)>0) {
 	print STDERR scalar(keys %{$genes_de{"down"}})," down-regulated genes identified from $genede.\n";
 	print STDERR scalar(keys %{$genes_de{"both"}})," up/down-regulated genes identified from $genede.\n";
 	
-	
+	print LOG scalar(keys %{$genes_de{"up"}})," up-regulated genes identified from $genede.\n";
+	print LOG scalar(keys %{$genes_de{"down"}})," down-regulated genes identified from $genede.\n";
+	print LOG scalar(keys %{$genes_de{"both"}})," up/down-regulated genes identified from $genede.\n";	
 	
 	#implement DE tx here .....
 	
