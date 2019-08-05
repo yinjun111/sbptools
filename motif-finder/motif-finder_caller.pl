@@ -32,8 +32,9 @@ my $motif_intersect_to_txt="/home/jyin/Projects/Pipeline/sbptools/chipseq-summar
 ########
 
 
-my $version="0.1";
+my $version="0.11";
 
+#v0.11, add mouse motifs
 
 my $usage="
 
@@ -51,8 +52,7 @@ Parameters:
 	
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
-
-    --runmode|-r      Where to run the scripts, local, server or none [none]
+						
     --verbose|-v      Verbose
 	
 	
@@ -79,7 +79,7 @@ my $tx;
 my $tfbs="F";
 my $verbose=1;
 my $pcol=4; #hidden param
-my $runmode="none";
+#my $runmode="none";
 
 
 GetOptions(
@@ -87,7 +87,7 @@ GetOptions(
 	"output|o=s" => \$outputfolder,
 
 	"tx|t=s" => \$tx,	
-	"runmode|r=s" => \$runmode,		
+	#"runmode|r=s" => \$runmode,		
 	"verbose|v=s" => \$verbose,
 );
 
@@ -153,7 +153,8 @@ my %tx2ref=(
 		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt",
 		"genepromoter"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
-		"homermotif"=> "/data/jyin/Databases/Homer/homer.KnownMotifs.mm10.170917_short.bed"}
+		"homermotif"=> "/data/jyin/Databases/Homer/homer.KnownMotifs.mm10.170917_short.bed",
+		"homermotifs"=>"/data/jyin/Databases/Homer/homer.KnownMotifs.mm10.170917/*.bed"}
 );
 
 my $genomeversion;
