@@ -4,9 +4,10 @@ use Getopt::Long;
 
 
 
-my $version="0.3";
+my $version="0.31";
 
 #v0.3, runmode implementations in rnaseq and chipseq
+#v0.31, add rnaseq-motif
 
 my $usage="
 
@@ -24,6 +25,7 @@ Parameters:
     rnaseq-summary    Summarize RNA-Seq DE results
 
     rnaseq-var        RNA-seq variant calling pipeline
+    rnaseq-motif      RNA-seq TFBS motif finding pipeline
     
     chipseq-process   ChIP-seq QC, Align, and Peak Calling
     chipseq-merge     Summarize ChIP-Seq results
@@ -59,6 +61,7 @@ my $rnaseq_de="/apps/sbptools/rnaseq-de/rnaseq-de_caller.pl";
 my $rnaseq_summary="/apps/sbptools/rnaseq-summary/rnaseq-summary_caller.pl";
 
 my $rnaseq_var="sh /apps/sbptools/rnaseq-var/gatk3_rnaseq_variant_v1.sh";
+my $rnaseq_motif="/apps/sbptools/rnaseq-motif/rnaseq-motif_caller.pl";
 
 my $chipseq_process="/apps/sbptools/chipseq-process/chipseq-process_caller.pl";
 my $chipseq_merge="/apps/sbptools/chipseq-merge/chipseq-merge_caller.pl";
@@ -80,6 +83,7 @@ my %commands2program=(
 	"rnaseq-summary"=>$rnaseq_summary,
 
 	"rnaseq-var"=>$rnaseq_var,
+	"rnaseq-motif"=>$rnaseq_motif,
 	
     "chipseq-process"=>$chipseq_process,
     "chipseq-merge"=>$chipseq_merge,
