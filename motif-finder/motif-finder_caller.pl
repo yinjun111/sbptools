@@ -29,10 +29,12 @@ my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.p
 ########
 
 
-my $version="0.12";
+my $version="0.13";
 
 #v0.11, add mouse motifs
 #v0.12, update script directory
+#v0.13, add results folder
+
 
 my $usage="
 
@@ -220,7 +222,16 @@ print LOG "rm -R $outputfolder/findmotifsgenome/preparsed\n\n";
 system("rm -R $outputfolder/findmotifsgenome/preparsed");
 
 
+#######
+#Move to results folder
+#######
 
+system("mkdir $outputfolder/results");
+#motif to region
+system("cp $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt $outputfolder/results");
+#motif enrichment
+system("cp $outputfolder/findmotifsgenome/homerResults.html $outputfolder/results/$inputfilename\_homerResults.html");
+system("cp $outputfolder/findmotifsgenome/knownResults.html $outputfolder/results/$inputfilename\_knownResults.html");
 
 
 ########

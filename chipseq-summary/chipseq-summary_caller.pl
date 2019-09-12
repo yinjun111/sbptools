@@ -62,7 +62,7 @@ Parameters:
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+    --jobs|-j         Number of jobs to be paralleled. By default 3 jobs. [3]
 	
 	
 ";
@@ -98,12 +98,12 @@ my $fccutoff;
 my $qcutoff;
 my $geneinput;
 my $txinput;
-my $verbose;
+my $verbose=1;
 my $tx;
 my $tfbs="F";
 my $pcol=4; #hidden param
 my $runmode="none";
-my $jobs=5;
+my $jobs=3;
 
 GetOptions(
 	"in|i=s" => \$inputfolders,

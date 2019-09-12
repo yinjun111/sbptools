@@ -23,7 +23,9 @@ my $motiffinder="perl /apps/sbptools/motif-finder/motif-finder_caller.pl";
 ########
 
 
-my $version="0.1";
+my $version="0.2";
+
+#v0.2, add system run
 
 
 my $usage="
@@ -47,14 +49,19 @@ Parameters:
     --down            Downstream region length (not implemeted yet) [100]
 
     --promoter        alltx,longesttx,detx [alltx,longesttx]
-    --de              both,up,down [both]
+    --de              both,up,down [both,up,down]
 
     --out|-o          Output folder
 	
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
+    --runmode|-r      Where to run the scripts, local, system, server or none [none]
+                                  none, only prints scripts
+                                  local, run the scripts using parallel in local workstation(Falco)	
+                                  system, run the scripts without paralleling (Falco)
+                                  server, run the scripts in cluster (Firefly)
+								  
     --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 	
 	
@@ -482,6 +489,12 @@ elsif($runmode eq "local") {
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
+}
+if($runmode eq "system") {
+	print STDERR "\nRunning locally without parallel. sh $scriptfile1.\n\n";
+	print LOG "\nRunning locally without parallel. sh $scriptfile1.\n\n";
+	
+	system("sh $scriptfile1");
 }
 elsif($runmode eq "server") {
 	#server mode
