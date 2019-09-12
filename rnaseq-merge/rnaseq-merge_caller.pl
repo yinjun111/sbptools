@@ -15,6 +15,10 @@ my $multiqc="/apps/python-3.5.2/bin/multiqc";
 my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 
 my $rnaseqmergefilter="/apps/sbptools/rnaseq-merge/rnaseq-merge_filter.R";
+my $count2cpm="/apps/sbptools/rnaseq-merge/count2cpm.R";
+
+#Dev
+#my $count2cpm="/home/jyin/Projects/Pipeline/sbptools/rnaseq-merge/count2cpm.R";
 
 
 ########
@@ -22,12 +26,12 @@ my $rnaseqmergefilter="/apps/sbptools/rnaseq-merge/rnaseq-merge_filter.R";
 ########
 
 
-my $version="0.31";
+my $version="0.32";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
 #v0.31, solves screen envinroment problem
-
+#v0.32, add CPM
 
 my $usage="
 
@@ -109,11 +113,12 @@ GetOptions(
 my $genecountmerged="gene.results.merged.count.txt";
 my $genetpmmerged="gene.results.merged.tpm.txt";
 my $genefpkmmerged="gene.results.merged.fpkm.txt";
+my $genecpmmerged="gene.results.merged.cpm.txt";
 
 my $txcountmerged="tx.results.merged.count.txt";
 my $txtpmmerged="tx.results.merged.tpm.txt";
 my $txfpkmmerged="tx.results.merged.fpkm.txt";
-
+my $txcpmmerged="tx.results.merged.cpm.txt";
 
 #Create folders
 
@@ -405,6 +410,7 @@ print S1 "cp ".$tx2ref{$tx}{"txanno"}." $outputfolder/txanno.txt;";
 print S1 "$mergefiles -m $tempfolder/genes.txt -i ",join(",",@genefiles)," -l 5 -o $tempfolder/$genecountmerged\_wrongtitle;";
 print S1 "tail -n +2 $tempfolder/$genecountmerged\_wrongtitle > $tempfolder/$genecountmerged\_notitle;";
 print S1 "cat $tempfolder/gene_title.txt $tempfolder/$genecountmerged\_notitle > $outputfolder/$genecountmerged;";
+print S1 "Rscript $count2cpm --count $outputfolder/$genecountmerged --cpm $outputfolder/$genecpmmerged;";
 print S1 "rm $tempfolder/$genecountmerged\_wrongtitle;rm $tempfolder/$genecountmerged\_notitle;";
 print S1 "\n";
 
@@ -426,6 +432,7 @@ print S1 "\n";
 print S1 "$mergefiles -m $tempfolder/txs.txt -i ",join(",",@txfiles)," -l 5 -o $tempfolder/$txcountmerged\_wrongtitle -v;";
 print S1 "tail -n +2 $tempfolder/$txcountmerged\_wrongtitle > $tempfolder/$txcountmerged\_notitle;";
 print S1 "cat $tempfolder/tx_title.txt $tempfolder/$txcountmerged\_notitle > $outputfolder/$txcountmerged;";
+print S1 "Rscript $count2cpm --count $outputfolder/$txcountmerged --cpm $outputfolder/$txcpmmerged;";
 print S1 "rm $tempfolder/$txcountmerged\_wrongtitle;rm $tempfolder/$txcountmerged\_notitle;";
 print S1 "\n";
 
@@ -447,11 +454,30 @@ print S1 "\n";
 close S1;
 
 
+##########
 #filter for PCA
+##########
+
 open(S2,">$scriptfile2") || die "Error writing $scriptfile2. $!";
 
-print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --fpkm $outputfolder/$genefpkmmerged --tpm $outputfolder/$genetpmmerged --filter $filter;\n";
+#gene
+print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --fpkm $outputfolder/$genefpkmmerged --tpm $outputfolder/$genetpmmerged --filter $filter;";
+
+my $genecountmerged_filtered="gene.results.merged.count.filtered.$filter.txt";
+my $genecpmmerged_filtered="gene.results.merged.cpm.filtered.$filter.txt";
+
+print S2 "Rscript $count2cpm --count $outputfolder/$genecountmerged_filtered --cpm $outputfolder/$genecpmmerged_filtered;";
+print S2 "\n";
+
+#tx
 print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
+
+my $txcountmerged_filtered="tx.results.merged.count.filtered.$filter.txt";
+my $txcpmmerged_filtered="tx.results.merged.cpm.filtered.$filter.txt";
+
+print S2 "Rscript $count2cpm --count $outputfolder/$txcountmerged_filtered --cpm $outputfolder/$txcpmmerged_filtered;";
+
+print S2 "\n";
 
 close S2;
 

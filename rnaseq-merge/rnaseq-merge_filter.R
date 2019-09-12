@@ -4,8 +4,9 @@
 
 library("argparser",quietly =T)
 
-version="0.1"
+version="0.11"
 
+#v0.11, add write_table_proper
 
 description=paste0("rnaseq-merge_filter\nversion ",version,"\n","Usage:\nDescription: Filter merged results for PCA\n")
 
@@ -71,6 +72,16 @@ filter_data <- function(mat,type="sum",cutoff=10,na.rm=0) {
 	return(mat.sel)
 }
 
+write_table_proper<-function(file,data,name="Gene") {
+	data.df<-data.frame(name=rownames(data),data)
+	names(data.df)<-c(name,colnames(data))
+
+	write.table(data.df,file=file, row.names=FALSE,sep="\t",quote=F)
+
+	#write.table(data.frame(name=rownames(data),data),file=file, row.names=FALSE,sep="\t",quote=F)
+}
+
+
 
 #####
 #Read files
@@ -87,7 +98,7 @@ data.fpkm.sel<-data.fpkm[rownames(data.count.sel),]
 data.tpm.sel<-data.tpm[rownames(data.count.sel),]
 
 #
-write.table(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$count),data.count.sel,sep="\t",quote=F,col.names=NA)
-write.table(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$fpkm),data.fpkm.sel,sep="\t",quote=F,col.names=NA)
-write.table(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$tpm),data.tpm.sel,sep="\t",quote=F,col.names=NA)
+write_table_proper(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$count),data=data.count.sel,"Gene")
+write_table_proper(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$fpkm),data=data.fpkm.sel,"Gene")
+write_table_proper(file=sub(".txt",paste(".filtered.",args$filter,".txt",sep=""),args$tpm),data=data.tpm.sel,"Gene")
 
