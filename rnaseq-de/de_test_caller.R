@@ -2,9 +2,11 @@
 
 library("argparser",quietly =T)
 
-version="0.2b"
+version="0.3"
 
 #0.2b, change auto filter to *5. Add indfilter and cookscutoff option
+#0.23, add write_table_proper
+#0.3, add MA plot,fixed xlim for volcano plot
 
 description=paste0("de_test\nversion ",version,"\n","Usage:\nDescription: Differential Expression calculation using DESeq2\n")
 
@@ -122,7 +124,7 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 	result<-list()
 	result$result=mat.result
 	result$dds=dds
-	result$res=dds
+	result$res=res
 
 	return(result)
 }
@@ -182,7 +184,7 @@ volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",y
     xlab(xlab) + # Change X-Axis label
     ylab(ylab) + # Change Y-Axis label
     ylim(ylim) +
-    scale_x_continuous(breaks =seq(-5,5,1),lim=xlim) +
+    scale_x_continuous(breaks =seq(xlim[1],xlim[2],1),lim=xlim) +
     geom_hline(yintercept = -log10(as.numeric(q_cutoff)), colour="#990000", linetype="dashed") + #p cutoff
     geom_vline(xintercept = as.numeric(fc_cutoff), colour="#990000", linetype="dashed") + geom_vline(xintercept = -as.numeric(fc_cutoff), colour="#990000", linetype="dashed") + # fc cutoff line
     annotate("text",x=xlim[2]-0.5, y=ylim[2]-0.5, label=length(which(sig==1)),colour = "red",size = 5) + 
@@ -193,7 +195,7 @@ volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",y
 
 
 #to be implemented
-ma_plot_ggplot<-function(m,a,sig,xlim=c(0,20),ylim=c(-5,5),xlab="Log2m",ylab="-log10 P",main="Volcano Plot",m_cutoff=args$mcutoff,a_cutoff=args$a_cutof) {
+ma_plot_ggplot<-function(m,a,sig,xlim=c(1,20),ylim=c(-5,5),xlab="A:Log2 Mean of Normalized Counts",ylab="M:Log2 Fold Change",main="MA Plot",m_cutoff=args$fc_cutof) {
   
   #m is lfc
   #a is mean
@@ -211,8 +213,9 @@ ma_plot_ggplot<-function(m,a,sig,xlim=c(0,20),ylim=c(-5,5),xlab="Log2m",ylab="-l
   #define col and shape
   
   shapes=rep(21,length(m))
-  #shapes[abs(m)>xlim[2]]=24
-  #shapes[-log10(a)>ylim[2]]=24
+  shapes[abs(m)>ylim[2]]=24
+  shapes[a>xlim[2]]=24
+  shapes[a<xlim[1]]=24
   
   sig.new<-rep("N.S.",length(sig))
   sig.new[sig==1]="Up"
@@ -227,18 +230,19 @@ ma_plot_ggplot<-function(m,a,sig,xlim=c(0,20),ylim=c(-5,5),xlab="Log2m",ylab="-l
   #print(shs.sel)
   
   #transform data
-  m[m>xlim[2]]=xlim[2]
-  m[m<xlim[1]]=xlim[1]
+  a[a>xlim[2]]=xlim[2]
+  a[a<xlim[1]]=xlim[1]
   
-  a[-log10(a)>ylim[2]]=10^-ylim[2]
+  m[m>ylim[2]]=ylim[2]
+  m[m<ylim[1]]=ylim[1]
   
   #defined cols and shapes
   
-  data<-data.frame( lm=m,a=-log10(a),sig=sig.new,shape=shapes)
+  data<-data.frame( m=m,a=a,sig=sig.new,shape=shapes)
   
   
   #plot
-  vol <- ggplot(data, aes(x = lm, y =a, fill = sig ,shape=factor(shape)))
+  vol <- ggplot(data, aes(x = a, y =m, fill = sig ,shape=factor(shape)))
   
   vol + ggtitle(label = main) +
     geom_point(size = 2, alpha = 1, na.rm = T, colour = "black") +
@@ -251,15 +255,22 @@ ma_plot_ggplot<-function(m,a,sig,xlim=c(0,20),ylim=c(-5,5),xlab="Log2m",ylab="-l
     xlab(xlab) + # Change X-Axis label
     ylab(ylab) + # Change Y-Axis label
     ylim(ylim) +
-    scale_x_continuous(breaks =seq(-5,5,1),lim=xlim) +
-    geom_hline(yintercept = -log10(as.numeric(a_cutoff)), colour="#990000", linetype="dashed") + #p cutoff
-    geom_vline(xintercept = as.numeric(m_cutoff), colour="#990000", linetype="dashed") + geom_vline(xintercept = -as.numeric(m_cutoff), colour="#990000", linetype="dashed") + # m cutoff line
+    scale_x_continuous(breaks =seq(xlim[1],xlim[2],1),lim=xlim) +
+    #geom_hline(yintercept = -log10(as.numeric(a_cutoff)), colour="#990000", linetype="dashed") + #p cutoff
+    geom_hline(yintercept = as.numeric(m_cutoff), colour="#990000", linetype="dashed") + geom_hline(yintercept = -as.numeric(m_cutoff), colour="#990000", linetype="dashed") + # a cutoff line
     annotate("text",x=xlim[2]-0.5, y=ylim[2]-0.5, label=length(which(sig==1)),colour = "red",size = 5) + 
-    annotate("text",x=xlim[1]+0.5, y=ylim[2]-0.5, label=length(which(sig==-1)),colour = "green",size = 5) + 
-    annotate("text",x=xlim[2]-1, y=-log10(as.numeric(a_cutoff))+0.5, label=substring(main,28),colour = "red",size = 3) 
+    annotate("text",x=xlim[2]-0.5, y=ylim[1]+0.5, label=length(which(sig==-1)),colour = "green",size = 5) 
   
 }
 
+write_table_proper<-function(file,data,name="Gene") {
+	data.df<-data.frame(name=rownames(data),data)
+	names(data.df)<-c(name,colnames(data))
+
+	write.table(data.df,file=file, row.names=FALSE,sep="\t",quote=F)
+
+	#write.table(data.frame(name=rownames(data),data),file=file, row.names=FALSE,sep="\t",quote=F)
+}
 
 #generate plots
 
@@ -286,7 +297,9 @@ rdatafile=sub(".txt$",".rdata",args$out,perl=T)
 
 data.sel.result<-deseq2_test(mat=data.sel,anno=anno,design=args$formula,fc_cutoff=args$fccutoff,q_cutoff=args$qcutoff,pmethod=args$pmethod,qmethod=args$qmethod,treat=args$treat,ref=args$ref,independentfiltering=args$independentfiltering,cookscutoff=args$cookscutoff)
 
-write.table(data.sel.result$result,file=args$out,sep="\t",quote=F,col.names = NA)
+#write.table(data.sel.result$result,file=args$out,sep="\t",quote=F,col.names = NA)
+
+write_table_proper(data.sel.result$result,file=args$out,"Feature")
 
 save.image(file=rdatafile)
 
@@ -303,8 +316,28 @@ volcano_plot_ggplot(fc=data.sel.result$result[,1],q=data.sel.result$result[,4],s
 dev.off()
 
 #turned off for now, no X11 in linux
+
 #vp_outfile_jpg=sub("\\.\\w+$","_volcanoplot.jpg",args$out,perl=T)
 
 #jpeg(vp_outfile_jpg,width=7, height=6, units="in", res=300) 
 #volcano_plot_ggplot(fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10 ",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
 #dev.off()
+
+
+#####
+#Plots
+#####
+
+#volcano plot
+mp_outfile_pdf=sub("\\.\\w+$","_maplot.pdf",args$out,perl=T)
+
+pdf(mp_outfile_pdf,width=7, height=6)
+ma_plot_ggplot(m=data.sel.result$result[,1],a=log2(data.sel.result$res[,1]),sig=data.sel.result$result[,5],ylab=paste("M:",colnames(data.sel.result$result)[1],sep=""),main=paste("MA Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),m_cutoff = args$fccutoff)
+dev.off()
+
+
+#mp_outfile_jpg=sub("\\.\\w+$","_maplot.jpg",args$out,perl=T)
+
+#jpeg(width=7, height=6, units="in", res=300)
+
+
