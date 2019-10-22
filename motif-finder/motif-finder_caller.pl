@@ -15,11 +15,14 @@ use List::Util qw(sum);
 #my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
 
 
-my $homer="/home/jyin/Programs/Homer/bin";
-my $findmotifsgenome="$homer/findMotifsGenome.pl";
-my $bed2pos="$homer/bed2pos.pl";
+#my $homer="/home/jyin/Programs/Homer/bin";
+my $homer="/apps/homer/bin/";
+my $findmotifsgenome=locate_cmd("findMotifsGenome.pl","$homer/findMotifsGenome.pl";
+my $bed2pos=locate_cmd("bed2pos.pl","$homer/bed2pos.pl");
 
-my $intersectbed="/apps/bedtools2-2.26.0/bin/bedtools intersect";
+my $bedtools=locate_cmd("bedtools","/apps/bedtools2-2.26.0/bin/bedtools");
+my $intersectbed="$bedtools intersect";
+
 my $intersect_multi_bed="/apps/sbptools/motif-finder/intersect_multi_bed.sh";
 my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.pl";
 
@@ -29,12 +32,12 @@ my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.p
 ########
 
 
-my $version="0.13";
+my $version="0.14";
 
 #v0.11, add mouse motifs
 #v0.12, update script directory
 #v0.13, add results folder
-
+#v0.14, add locate_cmd
 
 my $usage="
 
@@ -243,3 +246,19 @@ sub current_time {
 	my $now = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
 	return $now;
 }
+
+sub locate_cmd {
+	my ($cmdname,$defaultlocation)=@_;
+	my $cmdlocation;
+	
+	if(-e $defaultlocation) {
+		$cmdlocation=$defaultlocation;
+	}
+	else {
+		use File::Which qw(which where); 
+		$cmdlocation = which $cmdname;
+	}
+	
+	return $cmdlocation;
+}
+

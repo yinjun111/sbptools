@@ -22,7 +22,10 @@ my $text2excel="perl /apps/sbptools/text2excel/text2excel.pl";
 ########
 
 
-my $version="0.1a";
+my $version="0.1c";
+
+#v0.1b, changed DE match pattern
+#v0.1c, add first line recognition in DE results
 
 my $usage="
 
@@ -259,7 +262,7 @@ if(defined $geneinput && length($geneinput)>0) {
 	
 	while(<IN>) {
 		tr/\r\n//d;
-		next if $_=~/^Gene/; 
+		next if $_=~/^(Gene|Feature)/; 
 		$genes{$_}++;
 	}
 	close IN;
@@ -350,11 +353,13 @@ foreach my $folder (sort keys %folder2genede) {
 	
 	open(IN,$folder2dir{$folder}."/".$folder2genede{$folder}) || die $!;
 	
+	my $linenum=0;
+	
 	while(<IN>) {
 		tr/\r\n//d;
 		my @array=split/\t/;
 		
-		if($_=~/^\W/) {
+		if($linenum==0) {
 
 			if(defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
 				$array[5]="Significance: Log2FC $fccutoff BHP $qcutoff";
@@ -392,8 +397,12 @@ foreach my $folder (sort keys %folder2genede) {
 			$folder2genesig{$folder}{$array[0]}=$array[5];
 			$folder2geneinfo{$folder}{$array[0]}=join("\t",@array);
 		}
+		
+		$linenum++;
 	}
 	close IN;
+	
+	
 }
 
 

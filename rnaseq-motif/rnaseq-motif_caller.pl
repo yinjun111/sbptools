@@ -12,21 +12,22 @@ use List::Util qw(sum);
 #Prerequisites
 ########
 
-my $motiffinder="perl /apps/sbptools/motif-finder/motif-finder_caller.pl";
+#my $sbptools=locate_cmd("sbptools","/usr/bin/sbptools");
+#my $motiffinder="$sbptools motif-finder"; #improve compatibility
 
 #Dev version
-#my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-finder_caller.pl";
-
+my $sbptools=locate_cmd("sbptools","/home/jyin/Projects/Pipeline/sbptools/sbptools_caller.pl");
+my $motiffinder="$sbptools motif-finder"; #improve compatibility
 
 ########
 #Interface
 ########
 
 
-my $version="0.2";
+my $version="0.21";
 
 #v0.2, add system run
-
+#v0.21, add locate_cmd
 
 my $usage="
 
@@ -509,6 +510,22 @@ close LOG;
 ########
 #Functions
 ########
+
+sub locate_cmd {
+	my ($cmdname,$defaultlocation)=@_;
+	my $cmdlocation;
+	
+	if(-e $defaultlocation) {
+		$cmdlocation=$defaultlocation;
+	}
+	else {
+		use File::Which qw(which where); 
+		$cmdlocation = which $cmdname;
+	}
+	
+	return $cmdlocation;
+}
+
 
 sub current_time {
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);

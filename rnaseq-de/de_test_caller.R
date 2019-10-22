@@ -129,7 +129,7 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 	return(result)
 }
 
-volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",ylab="-log10 P",main="Volcano Plot",fc_cutoff=args$fccutoff,q_cutoff=args$q_cutof) {
+volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-7,7),ylim=c(0,30),xlab="Log2FC",ylab="-log10 P",main="Volcano Plot",fc_cutoff=args$fccutoff,q_cutoff=args$q_cutof) {
   
   library(ggplot2)
   
@@ -195,7 +195,7 @@ volcano_plot_ggplot<-function(fc,q,sig,xlim=c(-5,5),ylim=c(0,20),xlab="Log2FC",y
 
 
 #to be implemented
-ma_plot_ggplot<-function(m,a,sig,xlim=c(1,20),ylim=c(-5,5),xlab="A:Log2 Mean of Normalized Counts",ylab="M:Log2 Fold Change",main="MA Plot",m_cutoff=args$fc_cutof) {
+ma_plot_ggplot<-function(m,a,sig,xlim=c(1,30),ylim=c(-7,7),xlab="A:Log2 Mean of Normalized Counts",ylab="M:Log2 Fold Change",main="MA Plot",m_cutoff=args$fc_cutof) {
   
   #m is lfc
   #a is mean
@@ -338,6 +338,7 @@ dev.off()
 
 #mp_outfile_jpg=sub("\\.\\w+$","_maplot.jpg",args$out,perl=T)
 
-#jpeg(width=7, height=6, units="in", res=300)
-
+#jpeg(mp_outfile_jpg,width=7, height=6, units="in", res=300)
+#ma_plot_ggplot(m=data.sel.result$result[,1],a=log2(data.sel.result$res[,1]),sig=data.sel.result$result[,5],ylab=paste("M:",colnames(data.sel.result$result)[1],sep=""),main=paste("MA Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),m_cutoff = args$fccutoff)
+#dev.off()
 
