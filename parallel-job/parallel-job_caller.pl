@@ -1,6 +1,9 @@
 #!/usr/bin/perl -w
 use strict;
 use Getopt::Long;
+use Cwd qw(abs_path);
+use List::Util qw(min);
+
 
 #CutAdapt+FASTQC+RSEM+STAR
 
@@ -24,34 +27,47 @@ my $usage="
 
 parallel-job
 version: $version
-Usage: sbptools parallel-job
+Usage: sbptools parallel-job -i yourscripts.sh -n yourscripts -o jobsubmissionfolder -t 5 --nodes 1 --procs 4 -m 10gb -r
+Or simpley type: sbptools parallel-job -i yourscripts.sh -r
 
-Description: In Falco, BSR Linux server, use screen+parallel to parallelly running jobs in background.
-             In Firefly, BSR HPC cluster, use multiple controled qsub sessions for paralleling.
+Description: In Firefly, BSR HPC cluster, use multiple controled qsub sessions for paralleling.
 
 Parameters:
 
-    --in|-i           task file(s), shell script with one command per line
+    --in|-i           shell script file(s) with one command per line
 
+    --name|-n         Prefix name of the task. Default as your script name
+	
     Output files
-    --wo|-o           working output directory. Default as folder of input script 
+    --wo|-o           working output directory. Default as folder of your first input script
     --eo              SGE error message output directory. Default as folder of your input script
-    --oo              SGE output message. Default as input script
+    --oo              SGE output message output directory. Default as folder of your input script
 
-    Control the tasks
-    --ppn|-p          No. of precesses for each task
-    --mem|-m          Memory usage, e.g. 10G
-    --queue|-q        Queue in cluster
-    --task|-t         No. of tasks or paralleling process to cluster
-    --hold|-d         JOb dependency, e.g. -hold_jid in qsub
-    --tandem|--td     Only used when multiple taskes files in input
-                           Each task needs to be finished before the next one is ran
-	--name|-n         Prefix name of task
+    Control the tasks submited to the cluster
+    --task|-t         No. of tasks submitted to cluster for each script file[10]
+
+    For each task, there are two ways of specifying the computing resource,
+      but you can't mix --nodes and --ncpus together.
+	A) by specifying number of nodes and process
+    --nodes           No. of nodes for each task
+    --procs           No. of processors for each task
+	B) by specifying the total number of cpus
+    --ncpus           No. of cpus for each task for tasks can't use multiple nodes
+
+    --mem|-m          Memory usage for each process, e.g. 10gb
+
+
+    --tandem|--td     Only used when multiple task files in input
+                           Each task file needs to be successfully ran before the next one can be started
+
+
     --runmode|-r      
     --env|-e          Use your own runing envir, e.g. to source ~/.bashrc
 	
 	
 ";
+
+#In Falco, BSR Linux server, use screen+parallel to parallelly running jobs in background.
 
 
 unless (@ARGV) {
@@ -67,13 +83,15 @@ my $params=join(" ",@ARGV);
 #Parameters
 ########
 
-my $infile;
-my $ppn=4;
+my $infiles;
+my $nodes;
+my $ncpus;
 my $mem;
-my $task=20;
+my $task=10;
+my $procs;
 my $runmode=0;
 my $verbose=1;
-my $queue="";
+#my $queue="";
 my $env=0;
 my $hold;
 my $tandem=0;
@@ -90,30 +108,25 @@ GetOptions(
 	"wo|o=s" => \$wo,
 	"eo=s" => \$eo,
 	"oo=s" => \$oo,
-	"ppn|p=s" => \$ppn,
+	"ncpus=s" => \$ncpus,
+	"nodes=s" => \$nodes,	
+	"procs=s" => \$procs,
 	"mem|m=s" => \$mem,
 	"task|t=s" => \$task,
-	"queue|q=s" => \$queue,
+	#"queue|q=s" => \$queue,
 	"runmode"=> \$runmode,
-	"hold|d=s" => \$hold,
-	"tandem|d"=> \$tandem,
+	#"hold|d=s" => \$hold, #can be implemented if needed to #PBS -W 
+	"tandem"=> \$tandem,
 	"env|e" => \$env,
 	"verbose" => \$verbose,
 	"help|h" => sub {print STDERR $usage;exit;}
 	
 );
 
-#my $logfile="parallel-job_run.log";
-my $logfile=$outfile; #need to check log file ...
-$logfile=~s/\.txt/_parallel-job_run.log/;
 
-#write log file
-#open(LOG, ">$logfile") || die "Error write $logfile. $!";
-#my $now=current_time();
-#print LOG "perl $0 $params\n\n";
-#print LOG "Start time: $now\n\n";
-#print LOG "Current version: $version\n\n";
-#print LOG "\n";
+my $logfile="parallel-job_run.log";
+my $submitscriptfile="parallel-job_submit.sh";
+
 
 
 ########
@@ -132,18 +145,26 @@ print STDERR "\nWelcome $userattrs[6]($user) from $groupattrs[0] to Firefly!\n";
 #print LOG "\nWelcome $userattrs[6]($user) from $groupattrs[0] to Firefly!\n";
 
 
-#queue selection?
-#what queues do we have?
+########
+#Check parameters
+########
+
+#either --nodes and --procs, or --ncpus, but not both
+#this step is handled by PBS
 
 
 ######
 #Process input file
 ######
 
-my @infiles=split(",",$infile);
-my @infile_abspaths=map abs_path_dir($_), @infiles;
+#read infiles and folders
+my @infiles=split(",",$infiles);
+my @infile_abspaths=map {abs_path($_)} @infiles;
 my @infolders=map abs_path_dir($_), @infile_abspaths;
 my @qjnames=map file_short_name($_),@infiles;
+
+
+my @names;
 
 if(defined $name) {
 	@names=split(",",$name); #name of jobs
@@ -156,18 +177,21 @@ if(defined $name && @names!=@infiles) {
 }
 
 
-
 ####
 #Generate scripts
 ####
 
 #non-tandam may use more tasks,e.g. task x files
 
+my $firstfolder; #for overall submit scripit
 
 my @previous_jobs;
 my @submit_scripts;
 
 for(my $filenum=0;$filenum<@infiles;$filenum++) {
+	
+	#for each file in the file list
+
 	my $infile=$infiles[$filenum];
 	my $infolder=$infolders[$filenum];
 	my $qjname;
@@ -184,14 +208,20 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	my ($current_wo,$current_eo,$current_oo,$current_so);
 	
 	#output folder
-	if(defined $wo) {
+	if(defined $wo ) {
 		unless(-e $wo) {
 			mkdir($wo);
 		}
 		$current_wo=abs_path($wo);
+		
+		$firstfolder=$wo;
 	}
 	else {
 		$current_wo=$infolder;
+		
+		unless(defined $firstfolder && length($firstfolder)>0) {
+			$firstfolder=$current_wo;
+		}
 	}
 	
 	#
@@ -216,8 +246,12 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 		$current_oo="$current_wo/$qjname\_submit";
 	}	
 	
-	my $submit_script="$current_wo/$qjname\_submit.sh";
 	$current_so="$current_wo/$qjname\_submit"; #script output
+	
+	
+	my $submit_script="$current_wo/$qjname\_submit.sh";
+	open(OUT,">$submit_script") || die "Error writing $submit_script. $!";
+	
 	push @submit_scripts,$submit_script;
 	
 	unless(-e $current_so) {
@@ -225,20 +259,22 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	}
 	
 	#params for this job
-	my $job_param={
-		#so,wo,eo,oo,mem,que,ppn,env
+	my $job_params={
+		#so,wo,eo,oo,mem,que,procs,env
 		wo=>$current_wo,
 		eo=>$current_eo,
 		oo=>$current_oo,
 		so=>$current_so,
 		mem=>$mem,
-		que=>$queue,
-		ppn=>$ppn,
+		#que=>$queue,
+		ncpus=>$ncpus,
+		nodes=>$nodes,
+		procs=>$procs,		
 		env=>$env
 	};
 	
 	#open log file #add up by multipe files
-	open(LOG,">>$current_wo/$logfile") || die $!;
+	open(LOG,">>$current_wo/$logfile") || die "Error writing $current_wo/$logfile. $!";
 	
 	print LOG "perl $0 $params\n\n";
 	print LOG "parallel-job version $version\n\n";
@@ -255,7 +291,7 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	#######
 	
 	#output separate scripts
-	open(IN,$infile) || die $!;
+	open(IN,$infile) || die "Error reading $infile. $!";
 	my @command_lines;
 	
 	while(<IN>) {
@@ -274,50 +310,54 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	
 	print STDERR "Split command lines into ",min($task,scalar(@command_lines))," tasks.\n\n" if $verbose;
 	
-	open(OUT,">$submit_script") || die $!;
+	
 	#generate qj files
 	for(my $num=0;$num<@split_command_lines;$num++) {
 		#qj file name
 		my $commandline_script="$qjname\_".form_num($num+1,scalar(@split_command_lines)).".sh";
-		#qsub cmd
-		print OUT "qsub $current_so/$commandline_script\n";
 		
-		#write qj task
-		#tandem submission controlled by hold_ids
-		
-		if(($tandem && @previous_jobs) || (defined $hold && length($hold)>1)) {
-			#with either multiple submission, or defined hold ids
-			my @holdids;
-			if($tandem && @previous_jobs) {
-				push @hold_ids,@previous_jobs;
-			}
-			if(defined $hold && length($hold)>1) {
-				push @holdids, split(",",$hold);
-			}
-			
-			$job_params->{"hold_ids"}=join(",",@holdids);
-		}
-		
-		#function to write the script
 		write_qj_task($split_command_lines[$num],$commandline_script,$job_params);
 		
-		push @current_jobs,$commandline_script;
+		#qsub cmd
+		unless($tandem) {
+			print OUT "qsub $current_so/$commandline_script\n";
+		}
+		else {
+			#write qj task
+			#tandem submission controlled by -W depend=afterok:job1:job2:job3
+			
+			my $qjnamevar="$qjname\_".form_num($num+1,scalar(@split_command_lines));
+			
+			if(@previous_jobs) {
+				print OUT $qjnamevar,"=\$(qsub -W depend=afterok:",join(":",map {"\$".$_} @previous_jobs)," $current_so/$commandline_script)\n";
+			}
+			else {
+				print OUT $qjnamevar,"=\$(qsub $current_so/$commandline_script)\n";				
+				
+			}
+			
+			push @current_jobs,$qjnamevar;
+			
+		}
 	}
-	close OUT;
 	
 	push @previous_jobs,@current_jobs;
 }
 
+close OUT;
 
 
 ####
 #Run job submission script
 ####
 
+#merge all files for --tandem option
+system("cat ".join(" ",@submit_scripts)." > $firstfolder/$submitscriptfile");
+
+#my $runcommand=join(";",map {"sh ".$_} @submit_scripts);
+my $runcommand="sh $firstfolder/$submitscriptfile";
+
 #current run mode is, -r turn on or off
-
-my $runcommand=join(";",map {"sh ".$_} @submit_scripts);
-
 if($runmode) {
 	print STDERR "Submitting server jobs, running $runcommand.\n\n" if $verbose;
 	print LOG "Submitting server jobs, running $runcommand.\n\n";
@@ -365,37 +405,51 @@ sub write_qj_task {
 	my ($command_line,$commandline_script,$params)=@_;
 	
 	#global var
-	#so,wo,eo,oo,mem,que,ppn,env
+	#so,wo,eo,oo,mem,que,procs,env
+	
+	#return pbs file name
 	
 	#split every line
-	open(OUT2,">".$params->{"so"}."/$commandline_script") || die $!;
+	open(OUT2,">".$params->{"so"}."/$commandline_script") || die "Error writing ".$params->{"so"}."/$commandline_script";
 	print OUT2 "#!/bin/sh
 
 ##specify which shell is used
-#\$ -S /bin/bash
+#PBS -S /bin/bash
 ##job name
-#\$ -N $commandline_script\n";
-
-	print OUT2 "## Queue name\n#\$ -q ",$params->{"que"},"\n";
-	print OUT2 "## Parallel environment to defind # of cores\n#\$ -pe smp ",$params->{"ppn"},"\n";
+#PBS -N $commandline_script\n";
 	
-	if(defined $params->{"mem"}) {
-		print OUT2 "#\$ -l h_vmem=",$params->{"mem"},"\n";
-	}
+#queue function skip for now. Only default queue implemented in Firefly
+#print OUT2 "## Queue name\n#PBS -q ",$params->{"que"},"\n";
 
-print OUT2
-"#\$ -R y
-## Set time limit
-#\$ -l h_rt=1600:00:00\n";
-print OUT2 "## Set working directory\n#\$ -wd ",$params->{"wo"},"\n";
 
-if(defined $params->{"hold_ids"}) {
-	print OUT2 "#\$ -hold_jid ",$params->{"hold_ids"},"\n";
+#computing resource setting
+if(defined $params->{"nodes"}) {
+	print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},"\n";
 }
 
+if(defined $params->{"procs"}) {
+	print OUT2 "## Parallel environment to defind # of procs\n#PBS -l procs=",$params->{"procs"},"\n";
+}
+
+if(defined $params->{"ncpus"}) {
+	print OUT2 "## Parallel environment to defind # of cpus\n#PBS -l ncpus=",$params->{"ncpus"},"\n";
+}
+
+if(defined $params->{"mem"}) {
+	print OUT2 "#PBS -l mem=",$params->{"mem"},"\n"; 
+}
+
+#time limit
+print OUT2
+"## Set time limit
+#PBS -l walltime=1600:00:00\n";
+
+#work directory 
+#print OUT2 "## Set working directory\n#PBS -wd ",$params->{"wo"},"\n";
+
 print OUT2 "## Stdout and stderr log files\n";
-print OUT2 "#\$ -o ",$params->{"oo"},"/$commandline_script.out.txt\n";
-print OUT2 "#\$ -e ",$params->{"eo"},"/$commandline_script.err.txt\n";
+print OUT2 "#PBS -o ",$params->{"oo"},"/$commandline_script.out.txt\n";
+print OUT2 "#PBS -e ",$params->{"eo"},"/$commandline_script.err.txt\n";
 
 print OUT2 "##########################################\n";
 
@@ -403,16 +457,22 @@ print OUT2 "##########################################\n";
 		print OUT2 "source ~/.bashrc\n";
 	}
 	
+	#set work directory
+	print OUT2 "cd ",$params->{"wo"},"\n\n";
+
 	print OUT2 $command_line,"\n";
 	
 	print OUT2 "##########################################\n";
 	close OUT2;
+	
+	return $params->{"so"}."/$commandline_script";
+	
 }
 
 
 sub form_num {
 	my ($num,$maxnum)=@_;
-	my $maxnum_len=length($maxnum)>1?length($manxnum):2;
+	my $maxnum_len=length($maxnum)>1?length($maxnum):2;
 	
 	return(0 x ($maxnum_len-length($num))).$num;
 }
@@ -434,7 +494,7 @@ sub file_short_name {
 		$filename_short=$1;
 	}
 	elsif($filename=~/([^\/]+)$/) {
-		$filename_shortj=$1;
+		$filename_short=$1;
 	}
 	else {
 		$filename_short=$filename;
