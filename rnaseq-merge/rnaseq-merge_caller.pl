@@ -8,30 +8,17 @@ use File::Basename qw(basename);
 
 
 ########
-#Prerequisites
-########
-
-my $multiqc="/apps/python-3.5.2/bin/multiqc";
-my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
-
-my $rnaseqmergefilter="/apps/sbptools/rnaseq-merge/rnaseq-merge_filter.R";
-my $count2cpm="/apps/sbptools/rnaseq-merge/count2cpm.R";
-
-#Dev
-#my $count2cpm="/home/jyin/Projects/Pipeline/sbptools/rnaseq-merge/count2cpm.R";
-
-
-########
 #Interface
 ########
 
 
-my $version="0.32";
+my $version="0.4";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
 #v0.31, solves screen envinroment problem
 #v0.32, add CPM
+#v0.4, major updates, to add parallel job, and --dev option
 
 my $usage="
 
@@ -60,12 +47,15 @@ Parameters:
                          automatically defined signal cutoff as
                            Count >= No. of samples * 5
                          or can define a count number
-
-
 	
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+    --runmode|-r      Where to run the scripts, local, cluster or none [none]
 	
+	
+	#Parallel computing controls
+    --task            Number of tasks to be paralleled. By default 7 tasks. [7]
+    --ncpus           No. of cpus for each task for tasks can't use multiple nodes [2]
+    --mem|-m          Memory usage for each process
+
 ";
 
 #    --verbose|-v      Verbose
@@ -91,9 +81,13 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
-my $jobs=5;
+my $task=7;
+my $ncpus=2;
+my $mem;
 my $filter="auto";
 my $runmode="none";
+
+my $dev=0; #developmental version
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -102,13 +96,52 @@ GetOptions(
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,	
 	"filter=s" => \$filter,
-	"jobs|j=s" => \$jobs,
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,	
+
 	"runmode|r=s" => \$runmode,		
+
 	"verbose|v" => \$verbose,
+	
+	"dev" => \$dev,		
 );
 
 
+
+
+
+########
+#Prerequisites
+########
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+
+my $multiqc="/apps/python-3.5.2/bin/multiqc";
+
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+my $rnaseqmergefilter="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_filter.R";
+my $count2cpm="$sbptoolsfolder/rnaseq-merge/count2cpm.R";
+
+
+
+#used programs
+
+my $Rscript=find_program("/apps/R-3.5.2/bin/Rscript");
+
+
+
+########
 #default ouputs
+########
+
 
 my $genecountmerged="gene.results.merged.count.txt";
 my $genetpmmerged="gene.results.merged.tpm.txt";
@@ -145,6 +178,10 @@ my $logfile="$outputfolder/rnaseq-merge_run.log";
 
 my $scriptfile1="$scriptfolder/rnaseq-merge_run1.sh";
 my $scriptfile2="$scriptfolder/rnaseq-merge_run2.sh";
+
+my $scriptlocalrun="$outputfolder/rnaseq-merge_local_submission.sh";
+my $scriptclusterrun="$outputfolder/rnaseq-merge_cluster_submission.sh";
+
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -190,6 +227,14 @@ my %tx2ref=(
 
 
 
+########
+#Process
+########
+
+print STDERR "\nsbptools rnaseq-merge running ...\n\n" if $verbose;
+print LOG "\nsbptools rnaseq-merge running ...\n\n";
+
+
 if(defined $tx2ref{$tx}) {
 	print STDERR "Starting analysis using $tx.\n\n" if $verbose;
 	print LOG "Starting analysis using $tx.\n\n";
@@ -197,21 +242,8 @@ if(defined $tx2ref{$tx}) {
 else {
 	print STDERR "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n" if $verbose;
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
+	exit;
 }
-
-
-#Files for merging
-#Examples
-#JY_315_Isl.genes.results
-#JY_315_Isl.isoforms.results
-
-
-########
-#Process
-########
-
-print STDERR "\nsbptools rnaseq-merge running ...\n\n" if $verbose;
-print LOG "\nsbptools rnaseq-merge running ...\n\n";
 
 #open config files to find samples
 
@@ -378,7 +410,7 @@ foreach my $sample (@samples_array) {
 
 
 ########
-#Print out commands, for local and server run
+#Print out commands, for local and cluster run
 ########
 
 open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
@@ -410,7 +442,7 @@ print S1 "cp ".$tx2ref{$tx}{"txanno"}." $outputfolder/txanno.txt;";
 print S1 "$mergefiles -m $tempfolder/genes.txt -i ",join(",",@genefiles)," -l 5 -o $tempfolder/$genecountmerged\_wrongtitle;";
 print S1 "tail -n +2 $tempfolder/$genecountmerged\_wrongtitle > $tempfolder/$genecountmerged\_notitle;";
 print S1 "cat $tempfolder/gene_title.txt $tempfolder/$genecountmerged\_notitle > $outputfolder/$genecountmerged;";
-print S1 "Rscript $count2cpm --count $outputfolder/$genecountmerged --cpm $outputfolder/$genecpmmerged;";
+print S1 "$Rscript $count2cpm --count $outputfolder/$genecountmerged --cpm $outputfolder/$genecpmmerged;";
 print S1 "rm $tempfolder/$genecountmerged\_wrongtitle;rm $tempfolder/$genecountmerged\_notitle;";
 print S1 "\n";
 
@@ -432,7 +464,7 @@ print S1 "\n";
 print S1 "$mergefiles -m $tempfolder/txs.txt -i ",join(",",@txfiles)," -l 5 -o $tempfolder/$txcountmerged\_wrongtitle -v;";
 print S1 "tail -n +2 $tempfolder/$txcountmerged\_wrongtitle > $tempfolder/$txcountmerged\_notitle;";
 print S1 "cat $tempfolder/tx_title.txt $tempfolder/$txcountmerged\_notitle > $outputfolder/$txcountmerged;";
-print S1 "Rscript $count2cpm --count $outputfolder/$txcountmerged --cpm $outputfolder/$txcpmmerged;";
+print S1 "$Rscript $count2cpm --count $outputfolder/$txcountmerged --cpm $outputfolder/$txcpmmerged;";
 print S1 "rm $tempfolder/$txcountmerged\_wrongtitle;rm $tempfolder/$txcountmerged\_notitle;";
 print S1 "\n";
 
@@ -461,21 +493,21 @@ close S1;
 open(S2,">$scriptfile2") || die "Error writing $scriptfile2. $!";
 
 #gene
-print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --fpkm $outputfolder/$genefpkmmerged --tpm $outputfolder/$genetpmmerged --filter $filter;";
+print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --fpkm $outputfolder/$genefpkmmerged --tpm $outputfolder/$genetpmmerged --filter $filter;";
 
 my $genecountmerged_filtered="gene.results.merged.count.filtered.$filter.txt";
 my $genecpmmerged_filtered="gene.results.merged.cpm.filtered.$filter.txt";
 
-print S2 "Rscript $count2cpm --count $outputfolder/$genecountmerged_filtered --cpm $outputfolder/$genecpmmerged_filtered;";
+print S2 "$Rscript $count2cpm --count $outputfolder/$genecountmerged_filtered --cpm $outputfolder/$genecpmmerged_filtered;";
 print S2 "\n";
 
 #tx
-print S2 "Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
+print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
 
 my $txcountmerged_filtered="tx.results.merged.count.filtered.$filter.txt";
 my $txcpmmerged_filtered="tx.results.merged.cpm.filtered.$filter.txt";
 
-print S2 "Rscript $count2cpm --count $outputfolder/$txcountmerged_filtered --cpm $outputfolder/$txcpmmerged_filtered;";
+print S2 "$Rscript $count2cpm --count $outputfolder/$txcountmerged_filtered --cpm $outputfolder/$txcpmmerged_filtered;";
 
 print S2 "\n";
 
@@ -488,39 +520,81 @@ close S2;
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+my @scripts_all=($scriptfile1,$scriptfile2);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="rnaseq-merge-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
+
+	if($script=~/([^\/]+)\.\w+$/) {
+		#push @script_names,$1."_".basename_short($outputfolder);
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";
+}
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
 close LOG;
@@ -555,6 +629,44 @@ sub getsysoutput {
 	my $output=`$command`;
 	$output=~tr/\r\n//d;
 	return $output;
+}
+
+sub basename_short {
+	my $filename=shift @_;
+	
+	my $basename;
+	
+	if($filename=~/([^\/]+)\/?$/) {
+		$basename=$1;
+	}
+	
+	return $basename;
+
+}
+
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
 }
 
 
