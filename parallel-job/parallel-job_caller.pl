@@ -328,6 +328,9 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 			
 			my $qjnamevar="$qjname\_".form_num($num+1,scalar(@split_command_lines));
 			
+			#remove special char from qjname variables
+			$qjnamevar=~s/\W/_/g;
+			
 			if(@previous_jobs) {
 				print OUT $qjnamevar,"=\$(qsub -W depend=afterok:",join(":",map {"\$".$_} @previous_jobs)," $current_so/$commandline_script)\n";
 			}
