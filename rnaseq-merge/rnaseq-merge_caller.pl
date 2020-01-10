@@ -53,8 +53,8 @@ Parameters:
 	
 	#Parallel computing controls
     --task            Number of tasks to be paralleled. By default 7 tasks. [7]
-    --ncpus           No. of cpus for each task for tasks can't use multiple nodes [2]
-    --mem|-m          Memory usage for each process
+    --ncpus           No. of cpus for each task [2]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb
 
 ";
 
@@ -155,6 +155,10 @@ my $txcpmmerged="tx.results.merged.cpm.txt";
 
 #Create folders
 
+unless(defined $outputfolder && length($outputfolder)>0 ) {
+	print STDERR "\nERROR: -o outputfolder needs to be defined without default value.\n\n";
+	exit;
+}
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
@@ -231,8 +235,8 @@ my %tx2ref=(
 #Process
 ########
 
-print STDERR "\nsbptools rnaseq-merge running ...\n\n" if $verbose;
-print LOG "\nsbptools rnaseq-merge running ...\n\n";
+print STDERR "\nsbptools rnaseq-merge $version running ...\n\n" if $verbose;
+print LOG "\nsbptools rnaseq-merge $version running ...\n\n";
 
 
 if(defined $tx2ref{$tx}) {

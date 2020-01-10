@@ -5,33 +5,19 @@ use Cwd qw(abs_path);
 use File::Basename qw(basename);
 
 
-########
-#Prerequisites
-########
-
-my $r="/apps/R-3.4.1/bin/R";
-my $rscript="/apps/R-3.4.1/bin/Rscript";
-
-#Application version
-my $descript="/apps/sbptools/rnaseq-de/de_test_caller.R";
-my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
-
-
-
-#dev version
-#my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
-#my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #version 0.2a, add r version log
 #v0.3 add runmode
 #v0.31, solves screen envinroment problem
+#v0.4, add server option, updating r script
+
 
 my $usage="
 
@@ -71,9 +57,14 @@ Optional Parameters:
     --fccutoff        Log2 FC cutoff [1]
     --qcutoff         Corrected P cutoff [0.05]
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
-	
+    --runmode|-r      Where to run the scripts, local, cluster or none [none]
+
+	#Parallel computing controls	
+    --task            Number of tasks to be paralleled. By default 5 tasks. [5]
+    --ncpus           No. of cpus for each task [2]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb	
+
+
 ";
 
 #    --verbose|-v      Verbose
@@ -127,7 +118,13 @@ my $fccutoff=1;
 my $qcutoff=0.05;
 
 my $verbose=1;
-my $jobs=5;
+my $task=5;
+my $ncpus=2;
+my $mem;
+
+my $dev=0; #developmental version 
+
+
 my $tx;
 my $runmode="none";
 
@@ -150,11 +147,43 @@ GetOptions(
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
-	"jobs|j=s" => \$jobs,	
+	"task=s" => \$task,	
 	"verbose|v" => \$verbose,
+
+	"dev" => \$dev,		
 );
 
+########
+#Prerequisites
+########
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+#sbptools
+my $descript="$sbptoolsfolder/rnaseq-de/de_test_caller.R";
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+
+
+my $r=find_program("/apps/R-3.4.1/bin/R");
+my $rscript=find_program("/apps/R-3.4.1/bin/Rscript");
+
+
+#######
+#Input/Output
+#######
+
 $inputfolder = abs_path($inputfolder);
+
+unless(defined $outputfolder && length($outputfolder)>0 ) {
+	print STDERR "\nERROR: -o outputfolder needs to be defined without default value.\n\n";
+	exit;
+}
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
@@ -174,6 +203,11 @@ my $newconfigfile="$outputfolder/rnaseq-de_config.txt";
 my $rlogfile="$outputfolder/rnaseq-de_r_env.log";
 
 my $scriptfile1="$scriptfolder/rnaseq-de_run.sh";
+
+my $scriptlocalrun="$outputfolder/rnaseq-de_local_submission.sh";
+my $scriptclusterrun="$outputfolder/rnaseq-de_cluster_submission.sh";
+
+
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -249,6 +283,7 @@ if(defined $tx2ref{$tx}) {
 else {
 	print STDERR "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n" if $verbose;
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
+	exit;
 }
 
 
@@ -510,48 +545,91 @@ close S1;
 
 
 
+
 #######
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+my @scripts_all=($scriptfile1);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="rnaseq-de-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
+
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";	
+}
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
-
-
 close LOG;
+
+
+
 ########
 #Functions
 ########
@@ -587,6 +665,30 @@ sub build_timestamp {
 }
 
 
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
+}
 
 
 

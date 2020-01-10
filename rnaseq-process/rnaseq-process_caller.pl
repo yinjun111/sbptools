@@ -8,28 +8,18 @@ use File::Basename qw(basename);
 
 
 ########
-#Prerequisites
-########
-
-my $cutadapt="/apps/python-3.5.2/bin/cutadapt";
-my $fastqc="/apps/FastQC/fastqc";
-my $rsem="/apps/RSEM-1.3.1/rsem-calculate-expression";
-my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
-my $bamcoverage="/apps/python-3.5.2/bin/bamCoverage";
-
-
-########
 #Interface
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
 #0.2d correct bug for PE
 #0.3 add runmode, always show -v
 #v0.31, solves screen envinroment problem
+#v0.4 add find_program, and queuejob, --dev switch
 
 my $usage="
 
@@ -52,10 +42,19 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --jobs|-j         Number of jobs to be paralleled. By default 4 jobs. [4]
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+    --ncpus           No. of cpus for each task [4]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    
+
+    --runmode|-r      Where to run the scripts, local, cluster or none [none]
+                            local is to run locally using \"parallel\", recommended for Falco
+                            cluster is to submit jobs to PBS queue in the HPC, recommended for Firefly
+                            none is to generate scripts only, after that,
+                                   you can use \"sh rnaseq-merge_local_submission.sh\" to run locally, or
+                                   you can use \"sh rnaseq-merge_cluster_submission.sh\" to submit job to PBS
+
+								   
 ";
 
 #--verbose|-v      Verbose
@@ -79,18 +78,74 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
-my $jobs=4;
+my $task;
+my $ncpus=4;
+my $mem;
 my $runmode="none";
+
+my $dev=0; #developmental version
+
 
 GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
-	"jobs|j=s" => \$jobs,	
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,		
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
+	"dev" => \$dev,		
 );
 
+
+#tasks, local 4, cluster 8
+unless(defined $task && length($task)>0) {
+	if($runmode eq "cluster") {
+		$task=8;
+	}
+	else {
+		$task=4;
+	}
+}
+
+
+
+########
+#Prerequisites
+########
+
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+my $rnaseqmergefilter="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_filter.R";
+my $count2cpm="$sbptoolsfolder/rnaseq-merge/count2cpm.R";
+
+
+my $cutadapt=find_program("/apps/python-3.5.2/bin/cutadapt");
+my $fastqc=find_program("/apps/FastQC/fastqc");
+my $rsem=find_program("/apps/RSEM-1.3.1/rsem-calculate-expression");
+my $star=find_program("/apps/STAR-master/bin/Linux_x86_64/STAR");
+my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
+
+
+
+#######
+#Output folder
+#######
+
+unless(defined $outputfolder && length($outputfolder)>0 ) {
+	print STDERR "\nERROR: -o outputfolder needs to be defined without default value.\n\n";
+	exit;
+}
 
 if(!-e $outputfolder) {
 	mkdir($outputfolder);
@@ -109,6 +164,12 @@ my $logfile="$outputfolder/rnaseq-process_run.log";
 my $newconfigfile="$outputfolder/rnaseq-process_config.txt";
 
 my $scriptfile1="$scriptfolder/rnaseq-process_run.sh";
+
+
+my $scriptlocalrun="$outputfolder/rnaseq-process_local_submission.sh";
+my $scriptclusterrun="$outputfolder/rnaseq-process_cluster_submission.sh";
+
+
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -134,6 +195,14 @@ my %tx2ref=(
 );
 
 
+########
+#Process
+########
+
+print STDERR "\nsbptools rnaseq-process $version running ...\n\n" if $verbose;
+print LOG "\nsbptools rnaseq-process $version running ...\n\n";
+
+
 if(defined $tx2ref{$tx}) {
 	print STDERR "Starting analysis using $tx.\n\n" if $verbose;
 	print LOG "Starting analysis using $tx.\n\n";
@@ -141,15 +210,9 @@ if(defined $tx2ref{$tx}) {
 else {
 	print STDERR "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n" if $verbose;
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
+	exit;
 }
 
-
-########
-#Process
-########
-
-print STDERR "\nsbptools rnaseq-process running ...\n\n" if $verbose;
-print LOG "\nsbptools rnaseq-process running ...\n\n";
 
 #open config files to find fastqs
 
@@ -299,9 +362,12 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $cutadaptlog="$samplefolder/$sample\_cutadapt.log";
 
 		#$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT -o $fastq1trim -p $fastq2trim $fastq1 $fastq2 > $cutadaptlog 2>&1;";
+
+		#$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT $fastq1 $fastq2 | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim >> $cutadaptlog 2>&1;";
+
 		
-		#add poly-A/T trimming
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT $fastq1 $fastq2 | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim >> $cutadaptlog 2>&1;";
+		#add poly-A/T trimming, used shorter -A adapter trimming
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim >> $cutadaptlog 2>&1;";
 	}
 }
 else {
@@ -416,43 +482,87 @@ close S1;
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+my @scripts_all=($scriptfile1);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="rnaseq-process-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
+
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";	
+}
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
-
 close LOG;
+
+
+
+
 ########
 #Functions
 ########
@@ -486,7 +596,29 @@ sub build_timestamp {
 }
 
 
-
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
+}
 
 
 

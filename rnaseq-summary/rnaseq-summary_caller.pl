@@ -8,13 +8,6 @@ use List::Util qw(sum);
 #CutAdapt+FASTQC+RSEM+STAR
 
 
-########
-#Prerequisites
-########
-
-my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
-my $text2excel="perl /apps/sbptools/text2excel/text2excel.pl";
-
 
 
 ########
@@ -22,10 +15,12 @@ my $text2excel="perl /apps/sbptools/text2excel/text2excel.pl";
 ########
 
 
-my $version="0.1c";
+my $version="0.4";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
+
+#v0.4, to be consistent with other rnaseq scripts
 
 my $usage="
 
@@ -99,6 +94,8 @@ my $jobs=5;
 my $tx;
 my $runmode="local";
 
+my $dev=0; #developmental version
+
 GetOptions(
 	"in|i=s" => \$inputfolders,
 	"output|o=s" => \$outputfolder,
@@ -114,7 +111,24 @@ GetOptions(
 	"runmode|r=s" => \$runmode,		
 	"jobs|j=s" => \$jobs,
 	"verbose|v" => \$verbose,
+	
+	"dev" => \$dev,	
 );
+
+########
+#Prerequisites
+########
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $text2excel="$sbptoolsfolder/text2excel/text2excel.pl";
+
 
 
 ########
@@ -201,11 +215,11 @@ my %folder2txde;
 my %folder2dir;
 
 foreach my $inputfolder (split(",",$inputfolders)) {
-	print STDERR $inputfolder,"#1\n";
+	#print STDERR $inputfolder,"#1\n";
 	my @folders=glob("$inputfolder/*");
 	foreach my $folder (@folders) {
 		if(-d $folder) {
-			print STDERR $folder,"#2\n";
+			#print STDERR $folder,"#2\n";
 			if(-e "$folder/rnaseq-de_run.log") {
 				#rnaseq-de folder
 				my $foldername=basename($folder);
@@ -233,10 +247,20 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 	}
 }
 
+#error message
+
+if(keys %folder2genede ==0) {
+	print STDERR "\nERROR:No rnaseq-de folder was detected in $inputfolders\n\n";
+	print LOG "\nERROR:No rnaseq-de folder was detected in $inputfolders\n\n";
+	exit;
+}
+
+
 #print out what were found
 
 print STDERR "Printing files identified from input folder(s).\n\n" if $verbose;
 print LOG "Printing files identified from input folder(s).\n\n";
+
 
 foreach my $folder (sort keys %folder2genede) {
 	print STDERR $folder,"\t",$folder2genede{$folder},"\n" if $verbose;
