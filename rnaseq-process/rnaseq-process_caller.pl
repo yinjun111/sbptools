@@ -47,7 +47,7 @@ Parameters:
     --ncpus           No. of cpus for each task [4]
     --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
-    --nobamcoverage   Use --nobamcoverage 1 to turn off producing bw file for bam files [0]
+    --nobamcoverage   Use --nobamcoverage turn off producing bw file for bam files
 
 
     --runmode|-r      Where to run the scripts, local, cluster or none [none]
@@ -97,7 +97,7 @@ GetOptions(
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
-	"nobamcoverage=s" => \$nobamcoverage,	
+	"nobamcoverage" => \$nobamcoverage,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		
@@ -545,14 +545,18 @@ close LOUT;
 
 #print out command for cluster parallel runs
 
-my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env"; #changed here for none version
 
 if(defined $mem && length($mem)>0) {
 	$clustercommand.=" -m $mem";	
 }
 
-print SOUT $clustercommand,"\n";
+print SOUT "sh $outputfolder/scripts/parallel-job_submit.sh\n"; #submit step
 close SOUT;
+
+
+system("$clustercommand");
+print LOG "$clustercommand;\n\n";
 
 
 
