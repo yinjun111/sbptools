@@ -12,14 +12,15 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
 #0.2d correct bug for PE
 #0.3 add runmode, always show -v
 #v0.31, solves screen envinroment problem
-#v0.4 add find_program, and queuejob, --dev switch
+#v0.4 add find_program, and queuejob, --dev switch, add 30gb requirement
+#v0.41 option to turn off bamcoverage due to long processing time. changed cutadapt logging
 
 my $usage="
 
@@ -44,7 +45,9 @@ Parameters:
 
     --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
     --ncpus           No. of cpus for each task [4]
-    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
+
+    --nobamcoverage   Use --nobamcoverage 1 to turn off producing bw file for bam files [0]
 
 
     --runmode|-r      Where to run the scripts, local, cluster or none [none]
@@ -80,7 +83,8 @@ my $verbose=1;
 my $tx;
 my $task;
 my $ncpus=4;
-my $mem;
+my $nobamcoverage=0;
+my $mem="40gb";
 my $runmode="none";
 
 my $dev=0; #developmental version
@@ -92,7 +96,8 @@ GetOptions(
 	"tx|t=s" => \$tx,
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
-	"mem=s" => \$mem,		
+	"mem=s" => \$mem,
+	"nobamcoverage=s" => \$nobamcoverage,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		
@@ -285,11 +290,23 @@ while(<IN>) {
 
 		
 		#fastq1
-		push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ1"}];
+		if(-e $array[$configattrs{"FASTQ1"}]) {
+			push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ1"}];
+		}
+		else {
+			print STDERR "\n\nERROR:",$array[$configattrs{"FASTQ1"}]," doesn't exist. Please check $configfile setting.\n\n";
+			print LOG "\n\nERROR:",$array[$configattrs{"FASTQ1"}]," doesn't exist. Please check $configfile setting.\n\n";
+		}
 		
 		#fastq2 (Read2)
 		if(defined $configattrs{"FASTQ2"}) {
-			push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ2"}];
+			if(-e $array[$configattrs{"FASTQ2"}]) {
+				push @{$sample2fastq{$indexname}},$array[$configattrs{"FASTQ2"}];
+			}
+			else {
+				print STDERR "\n\nERROR:",$array[$configattrs{"FASTQ2"}]," doesn't exist. Please check $configfile setting.\n\n";
+				print LOG "\n\nERROR:",$array[$configattrs{"FASTQ2"}]," doesn't exist. Please check $configfile setting.\n\n";	
+			}
 		}
 		
 		if(defined $configattrs{"INDEX"}) {
@@ -367,7 +384,11 @@ if(defined $configattrs{"FASTQ2"}) {
 
 		
 		#add poly-A/T trimming, used shorter -A adapter trimming
-		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim >> $cutadaptlog 2>&1;";
+		#$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim >> $cutadaptlog 2>&1;";
+		
+		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim 1>>$cutadaptlog;";
+		
+		
 	}
 }
 else {
@@ -391,7 +412,9 @@ else {
 		#$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -o $fastq1trim $fastq1 > $cutadaptlog 2>&1;";
 		
 		#add poly-A/T trimming
-		$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 | $cutadapt -j 4 -a \"A{100}\" - | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim >> $cutadaptlog 2>&1;";
+		#$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 | $cutadapt -j 4 -a \"A{100}\" - | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim >> $cutadaptlog 2>&1;";
+		
+		$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 2>>$cutadaptlog | $cutadapt -j 4 -a \"A{100}\" - 2>>$cutadaptlog | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim 1>>$cutadaptlog;";
 
 	}
 }
@@ -442,7 +465,9 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
-		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
+		if($nobamcoverage==0) {
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample.genome.sorted.bw;";
+		}
 	}
 }
 else {
@@ -458,7 +483,9 @@ else {
 		
 		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
-		$sample2workflow{$sample}.="$bamcoverage --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 1 -o $samplefolder/$sample.genome.sorted.bw;";
+		if($nobamcoverage==0) {
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample.genome.sorted.bw;";
+		}
 	}
 }
 

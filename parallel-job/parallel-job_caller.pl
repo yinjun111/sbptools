@@ -6,6 +6,11 @@ use List::Util qw(min);
 
 
 #CutAdapt+FASTQC+RSEM+STAR
+########
+#Updates
+########
+
+#0.11 change procs to ppn, procs is still usable but hidden
 
 
 ########
@@ -20,7 +25,7 @@ use List::Util qw(min);
 ########
 
 
-my $version="0.1";
+my $version="0.11";
 
 
 my $usage="
@@ -50,7 +55,8 @@ Parameters:
       but you can't mix --nodes and --ncpus together.
 	A) by specifying number of nodes and process
     --nodes           No. of nodes for each task
-    --procs           No. of processors for each task
+    #--procs           No. of processors for each task
+    --ppn             No. of processes for each task	
 	B) by specifying the total number of cpus
     --ncpus           No. of cpus for each task for tasks can't use multiple nodes
 
@@ -85,6 +91,7 @@ my $params=join(" ",@ARGV);
 
 my $infiles;
 my $nodes;
+my $ppn;
 my $ncpus;
 my $mem;
 my $task=10;
@@ -111,6 +118,7 @@ GetOptions(
 	"ncpus=s" => \$ncpus,
 	"nodes=s" => \$nodes,	
 	"procs=s" => \$procs,
+	"ppn=s" => \$ppn,	
 	"mem|m=s" => \$mem,
 	"task|t=s" => \$task,
 	#"queue|q=s" => \$queue,
@@ -269,6 +277,7 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 		#que=>$queue,
 		ncpus=>$ncpus,
 		nodes=>$nodes,
+		ppn=>$ppn,		
 		procs=>$procs,		
 		env=>$env
 	};
@@ -427,7 +436,12 @@ sub write_qj_task {
 
 #computing resource setting
 if(defined $params->{"nodes"}) {
-	print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},"\n";
+	if(defined $params->{"ppn"}) {
+		print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},":ppn=",$params->{"ppn"},"\n";
+	}
+	else {
+		print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},"\n";
+	}
 }
 
 if(defined $params->{"procs"}) {

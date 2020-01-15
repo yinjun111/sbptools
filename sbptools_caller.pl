@@ -4,10 +4,11 @@ use Getopt::Long;
 
 
 
-my $version="0.31";
+my $version="0.4";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
+#v0.4, major updates to support Firefly
 
 my $usage="
 
@@ -18,12 +19,25 @@ Usage: sbptools [tool] [parameters]
 
 Parameters:
 
-    
+    ########
+    #Supported in both Firefly and Falco
+    ########
     rnaseq-process    RNA-seq QC, Align, and RSEM for FASTQ files
     rnaseq-merge      Merge rnaseq-process results for downstream analyses
     rnaseq-de         Perform DE analysis using DESeq2
     rnaseq-summary    Summarize RNA-Seq DE results
 
+    mergefiles        Use a model file to merge different files together
+    text2excel        Build excel file using text file (by Andrew Hodges)
+
+    ########
+    #Supported only in Firefly
+    ########
+    parallel-job      Batch job submission in Firefly
+
+    ########
+    #Supported only in Falco
+    ########	
     rnaseq-var        RNA-seq variant calling pipeline
     rnaseq-motif      RNA-seq TFBS motif finding pipeline
     
@@ -38,8 +52,6 @@ Parameters:
 
     ensembl2ucsc      Convert Ensembl gtf/fasta/bed into UCSC format
 
-    mergefiles        Use a model file to merge different files together
-    text2excel        Build excel file using text file (by Andrew Hodges)
 
 ";
 
@@ -73,6 +85,7 @@ my $motif_finder="/apps/sbptools/motif-finder/motif-finder_caller.pl";
 my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
 my $text2excel ="perl /apps/sbptools/text2excel/text2excel.pl";
 
+my $parallel_job ="perl /apps/sbptools/parallel-job/parallel-job_caller.pl";
 
 my %commands2program=(
     "bs-fastq"=>$bs_fastq,
@@ -94,6 +107,8 @@ my %commands2program=(
     
 	"mergefiles"=>$mergefiles,
     "text2excel"=>$text2excel,
+	
+	"parallel-job"=>$parallel_job,
 );
 
 my ($command,@params)=@ARGV;
