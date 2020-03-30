@@ -30,7 +30,7 @@ Description: Merge rnaseq-process folder to get summarized QC, count, TPM etc.
 
 Parameters:
 
-    --in|-i           Input folder(s)
+    --in|-i           Input folder(s), separated by \",\"
 	
 	#two ways of retrieving samples, either by names or by config files
     --samples|-s      Samples

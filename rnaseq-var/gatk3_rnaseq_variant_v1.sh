@@ -5,13 +5,13 @@
 #SBP Bioinformatics Core
 #######
 
-version="1.3a"
+version="1.4"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
 #version 1.3 remove huge alignment and index files to free up space
 #v1.3a, add -f to tabix
-
+#v1.4, compatibility in Firefly
 
 #######
 #Usage
@@ -27,6 +27,8 @@ version: $version
 Usage: sbptools rnaseq-var -i yourfastq.fastq.gz -o outputfolder -s species
 
 Description: RNA-Seq variant calling pipeline built using GATK3. This pipeline is customized to call and annotate variants from RNA-Seq data for human/mouse using B38 annotation. You only need to provde fastq file and an output folder.
+
+Currently SE sequencing only
 
 Parameters:
 
@@ -133,7 +135,7 @@ then
 	genomeversion=hg38
 	genomedir=/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR
 	genomefasta=/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa
-	knownsnp=/home/jyin/Data/Databases/SNP/00-All.vcf.gz
+	knownsnp=/data/jyin/Databases/SNP/00-All.vcf.gz
 else
 	genomeversion=mm10
 	genomedir=/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR
@@ -143,25 +145,23 @@ fi
 
 #programs
 
-#java="/Library/Internet\\ Plug-Ins/JavaAppletPlugin.plugin/Contents/Home/bin/java"
-#star=/Users/diazmeco/RNASeqVar/programs/STAR-master/bin/MacOSX_x86_64/STAR
-#gatk3folder=/Users/diazmeco/RNASeqVar/programs/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef
-#bgzip=/Users/diazmeco/RNASeqVar/programs/htslib-1.9/bgzip
-#tabix=/Users/diazmeco/RNASeqVar/programs/htslib-1.9/tabix
-#snpeff=/Users/diazmeco/RNASeqVar/programs/snpEff/snpEff.jar
-#snpsift=/Users/diazmeco/RNASeqVar/programs/snpEff/SnpSift.jar
+#gatk3folder=/home/jyin/Programs/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef
+#bgzip=/home/jyin/Programs/htslib-1.9/bgzip
+#tabix=/home/jyin/Programs/htslib-1.9/tabix
+#snpeff=/home/jyin/Programs/snpEff/snpEff.jar
+#snpsift=/home/jyin/Programs/snpEff/SnpSift.jar
+#reformatsnpeffvcf=/home/jyin/Projects/Pipeline/sbptools/rnaseq-var/reformat_snpeff_vcf.pl
 
-java=/usr/bin/java						  
+
+#java=/usr/bin/java						  
+java=java
 star=/apps/STAR-master/bin/Linux_x86_64/STAR
-gatk3folder=/home/jyin/Programs/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef
-bgzip=/home/jyin/Programs/htslib-1.9/bgzip
-tabix=/home/jyin/Programs/htslib-1.9/tabix
-snpeff=/home/jyin/Programs/snpEff/snpEff.jar
-snpsift=/home/jyin/Programs/snpEff/SnpSift.jar
-reformatsnpeffvcf=/home/jyin/Projects/Pipeline/sbptools/rnaseq-var/reformat_snpeff_vcf.pl
-
-
-
+gatk3folder=/apps/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef
+bgzip=/apps/htslib-1.9/bgzip
+tabix=/apps/htslib-1.9/tabix
+snpeff=/apps/snpEff/snpEff.jar
+snpsift=/apps/snpEff/SnpSift.jar
+reformatsnpeffvcf=/apps/sbptools/rnaseq-var/reformat_snpeff_vcf.pl
 
 
 #######
