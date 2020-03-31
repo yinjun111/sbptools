@@ -4,11 +4,12 @@ use Getopt::Long;
 
 
 
-my $version="0.4";
+my $version="0.41";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
 #v0.4, major updates to support Firefly
+#v0.41 rnaseq-var is supported in Firefly
 
 my $usage="
 
@@ -27,6 +28,8 @@ Parameters:
     rnaseq-de         Perform DE analysis using DESeq2
     rnaseq-summary    Summarize RNA-Seq DE results
 
+    rnaseq-var        RNA-seq variant calling pipeline
+
     mergefiles        Use a model file to merge different files together
     text2excel        Build excel file using text file (by Andrew Hodges)
 
@@ -38,7 +41,6 @@ Parameters:
     ########
     #Supported only in Falco
     ########	
-    rnaseq-var        RNA-seq variant calling pipeline
     rnaseq-motif      RNA-seq TFBS motif finding pipeline
     
     chipseq-process   ChIP-seq QC, Align, and Peak Calling
