@@ -33,7 +33,7 @@ Currently SE sequencing only
 
 Parameters:
 
-	-i      Input fastq file
+	-i      Input fastq file, fastq file name must end with fastq.gz
 	-o      Output folder
 	-s      Species, human or mouse
 
