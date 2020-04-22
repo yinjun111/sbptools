@@ -17,7 +17,7 @@ use List::Util qw(sum);
 
 #my $homer="/home/jyin/Programs/Homer/bin";
 my $homer="/apps/homer/bin/";
-my $findmotifsgenome=locate_cmd("findMotifsGenome.pl","$homer/findMotifsGenome.pl";
+my $findmotifsgenome=locate_cmd("findMotifsGenome.pl","$homer/findMotifsGenome.pl");
 my $bed2pos=locate_cmd("bed2pos.pl","$homer/bed2pos.pl");
 
 my $bedtools=locate_cmd("bedtools","/apps/bedtools2-2.26.0/bin/bedtools");
