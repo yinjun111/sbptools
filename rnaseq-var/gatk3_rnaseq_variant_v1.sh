@@ -5,7 +5,7 @@
 #SBP Bioinformatics Core
 #######
 
-version="1.41"
+version="1.5"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
@@ -13,10 +13,11 @@ version="1.41"
 #v1.3a, add -f to tabix
 #v1.4, compatibility in Firefly
 #v1.41 fix samtools bug
+#v1.5 start from bam file
 
 #######
 #Usage
-#sh gatk3_rnaseq_variant_macos_dm_v1.sh yourfastq.fastq.gz outputfolder
+#sh gatk3_rnaseq_variant_version.sh yourfastq.fastq.gz outputfolder
 #######
 
 usage="
@@ -34,8 +35,11 @@ Currently SE sequencing only
 Parameters:
 
 	-i      Input fastq file, fastq file name must end with fastq.gz
+	-b      Start from bam files instead of fastq.
 	-o      Output folder
 	-s      Species, human or mouse
+
+	-y      Dry run. Only write commands and log files
 
 	Optional
 	-d      Whethter to dedup [T]
@@ -72,13 +76,20 @@ dedup=T
 species=human
 dpfilter=5.0
 keepalignment=F
+dryrun=F
 
 #receive options
-while getopts ":i:o:s:d:f:" opt; do
+while getopts "i:b:o:s:d:f:y:" opt; do
   case ${opt} in
     i )
 		fastqfile=$(realpath $OPTARG)
-		fastqfilename=$(basename $fastqfile)
+		filename=$(basename $fastqfile)
+		filename=${filename/.fastq.gz/}
+      ;;
+    b )
+		bamfile=$(realpath $OPTARG)
+		filename=$(basename $bamfile)
+		filename=${filename/.bam/}
       ;;
     o ) 
 		outfolder=$(realpath $OPTARG)
@@ -94,7 +105,10 @@ while getopts ":i:o:s:d:f:" opt; do
       ;;
     k ) 
 		keepalignment=$OPTARG
-      ;;	  	  
+      ;;
+    y ) 
+		dryrun=T
+      ;;		  
     \? ) 
 		printf "ERROR: Unknown options.\n\n$usage"
       ;;
@@ -109,8 +123,19 @@ done
 #outfolder=$(realpath $2)
 #species=$3 #human or mouse
 
+if [ -f "$fastqfile" ] || [ -f "$bamfile" ];then
+	logfile=$outfolder/$filename.run.log
+else
+	echo "ERROR:No input file was found."
+fi
+	
+#run file for recording command
+if [ -f "$fastqfile" ] || [ -f "$bamfile" ];then
+	runfile=$outfolder/$filename.run.sh
+else
+	echo "ERROR:No input file was found."
+fi
 
-logfile=$outfolder/${fastqfilename/fastq.gz/run.log}
 
 
 #log 
@@ -165,6 +190,13 @@ snpsift=/apps/snpEff/SnpSift.jar
 reformatsnpeffvcf=/apps/sbptools/rnaseq-var/reformat_snpeff_vcf.pl
 samtools=/apps/bin/samtools
 
+
+#####
+#Program starts
+#####
+
+printf "\n#gatk3_rnaseq_variant version $version running\n\n" | tee -a $logfile $runfile
+
 #######
 #Step 0
 #######
@@ -178,25 +210,45 @@ samtools=/apps/bin/samtools
 #######
 
 
-#1st-pass
-printf "1-pass alignment\n" | tee -a  $logfile
+if [ -f "$fastqfile" ];then
 
-mkdir -p $outfolder/alignment/1pass_alignment
+	#1st-pass
+	printf "#1-pass alignment\n" | tee -a  $logfile $runfile
 
-$star --genomeDir $genomedir --readFilesIn $fastqfile --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/${fastqfilename/fastq.gz/} >> $logfile 2>&1
+	if [ "$dryrun" == "F" ];then
+		mkdir -p $outfolder/alignment/1pass_alignment
+		
+		$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1
+	fi
+	
+	printf "mkdir -p $outfolder/alignment/1pass_alignment;$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1\n" | tee -a $runfile
+	
 
-#2-pass #need to use a different alignment output folder ...
-printf "2-pass alignment\n" | tee -a  $logfile
+	#2-pass #need to use a different alignment output folder ...
+	printf "\n\n#2-pass alignment, genomeGenerate\n" | tee -a  $logfile $runfile
 
-mkdir -p $outfolder/alignment/2pass_genomeDir
+	
+	if [ "$dryrun" == "F" ];then
+		mkdir -p $outfolder/alignment/2pass_genomeDir
+		$star --runMode genomeGenerate --genomeDir $outfolder/alignment/2pass_genomeDir --outFileNamePrefix $outfolder/alignment/2pass_genomeDir/$filename --genomeFastaFiles $genomefasta --sjdbFileChrStartEnd $outfolder/alignment/1pass_alignment/$filenameSJ.out.tab --sjdbOverhang 75 --runThreadN 4 >> $logfile 2>&1
+	fi
 
-$star --runMode genomeGenerate --genomeDir $outfolder/alignment/2pass_genomeDir --outFileNamePrefix $outfolder/alignment/2pass_genomeDir/${fastqfilename/fastq.gz/} --genomeFastaFiles $genomefasta --sjdbFileChrStartEnd $outfolder/alignment/1pass_alignment/${fastqfilename/fastq.gz/SJ.out.tab} --sjdbOverhang 75 --runThreadN 4 >> $logfile 2>&1
+	printf "mkdir -p $outfolder/alignment/2pass_genomeDir;$star --runMode genomeGenerate --genomeDir $outfolder/alignment/2pass_genomeDir --outFileNamePrefix $outfolder/alignment/2pass_genomeDir/$filename --genomeFastaFiles $genomefasta --sjdbFileChrStartEnd $outfolder/alignment/1pass_alignment/$filenameSJ.out.tab --sjdbOverhang 75 --runThreadN 4 >> $logfile 2>&1\n" | tee -a $runfile
+	
+	#2-pass alignment #convert output to bam
+	printf "\n\n#2-pass alignment, align\n" | tee -a  $logfile $runfile
+	if [ "$dryrun" == "F" ];then
+		mkdir -p $outfolder/alignment/2pass_alignment
+		$star --genomeDir $outfolder/alignment/2pass_genomeDir --readFilesIn $fastqfile --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted --outFileNamePrefix $outfolder/alignment/2pass_alignment/$filename >> $logfile 2>&1
+	fi
+	
+	printf "mkdir -p $outfolder/alignment/2pass_alignment;$star --genomeDir $outfolder/alignment/2pass_genomeDir --readFilesIn $fastqfile --readFilesCommand 'gunzip -c' --outSAMtype BAM Unsorted --outFileNamePrefix $outfolder/alignment/2pass_alignment/$filename >> $logfile 2>&1\n" | tee -a $runfile
 
-#2-pass alignment
-mkdir -p $outfolder/alignment/2pass_alignment
-$star --genomeDir $outfolder/alignment/2pass_genomeDir --readFilesIn $fastqfile --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/2pass_alignment/${fastqfilename/fastq.gz/} >> $logfile 2>&1
+	#sam file will be: $outfolder/alignment/2pass_alignment/${filename/fastq.gz/Aligned.out.sam}
+else
+	printf "#No Fastq file is defined. Skip STAR alignment.\n" | tee -a $logfile $runfile
+fi
 
-#sam file will be: $outfolder/alignment/2pass_alignment/${fastqfilename/fastq.gz/Aligned.out.sam}
 
 #need to add this 
 #samtools view -Sb DKO1_Normal.Aligned.out.sam > DKO1_Normal.Aligned.out.bam
@@ -208,31 +260,64 @@ $star --genomeDir $outfolder/alignment/2pass_genomeDir --readFilesIn $fastqfile 
 
 #GATK3 Start
 #Add read groups, sort, mark duplicates, and create index
-printf "gatk sort, mark duplicates, and create index\n"  | tee -a  $logfile
+printf "\n\n#gatk sort, mark duplicates, and create index\n"  | tee -a  $logfile $runfile
 
-mkdir -p $outfolder/gatk3
+if [ "$dryrun" == "F" ];then
+	mkdir -p $outfolder/gatk3
+fi
 
-eval $java -jar $gatk3folder/picard.jar AddOrReplaceReadGroups I=$outfolder/alignment/2pass_alignment/${fastqfilename/fastq.gz/Aligned.out.sam} O=$outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_added_sorted.bam} SO=coordinate RGID=id RGLB=library RGPL=platform RGPU=machine RGSM=sample USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1 
+printf "mkdir -p $outfolder/gatk3\n" | tee -a $runfile
+
+if [ -f "$fastqfile" ];then
+	if [ "$dryrun" == "F" ];then
+		eval $java -jar $gatk3folder/picard.jar AddOrReplaceReadGroups I=$outfolder/alignment/2pass_alignment/${filename}Aligned.out.bam O=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam SO=coordinate RGID=id RGLB=library RGPL=platform RGPU=machine RGSM=sample USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1 
+	fi
+	printf "eval $java -jar $gatk3folder/picard.jar AddOrReplaceReadGroups I=$outfolder/alignment/2pass_alignment/${filename}Aligned.out.bam O=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam SO=coordinate RGID=id RGLB=library RGPL=platform RGPU=machine RGSM=sample USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1\n" | tee -a $runfile
+	
+else
+	#existing bam
+	if [ "$dryrun" == "F" ];then
+		eval $java -jar $gatk3folder/picard.jar AddOrReplaceReadGroups I=$bamfile O=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam SO=coordinate RGID=id RGLB=library RGPL=platform RGPU=machine RGSM=sample USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1 
+	fi
+	printf "eval $java -jar $gatk3folder/picard.jar AddOrReplaceReadGroups I=$bamfile O=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam SO=coordinate RGID=id RGLB=library RGPL=platform RGPU=machine RGSM=sample USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1\n" | tee -a $runfile
+	
+fi
 
 
 if [ "$dedup" == "T" ]
 then
-	printf "%cd T, run gatk MarkDuplicates\n" "-"  | tee -a  $logfile
-	eval $java -jar $gatk3folder/picard.jar MarkDuplicates I=$outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_added_sorted.bam} O=$outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_dedupped.bam}  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=output.metrics USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1
+	printf "\n\n#%cd T, run gatk MarkDuplicates\n" "-"  | tee -a  $logfile $runfile
+	
+	if [ "$dryrun" == "F" ];then
+		eval $java -jar $gatk3folder/picard.jar MarkDuplicates I=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam O=$outfolder/gatk3/${filename}Aligned.out_dedupped.bam  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=output.metrics USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1
+	fi
+	
+	printf "eval $java -jar $gatk3folder/picard.jar MarkDuplicates I=$outfolder/gatk3/${filename}Aligned.out_added_sorted.bam O=$outfolder/gatk3/${filename}Aligned.out_dedupped.bam  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=output.metrics USE_JDK_DEFLATER=true USE_JDK_INFLATER=true >> $logfile 2>&1\n" | tee -a $runfile
+	
 else
-	printf "%cd F, skip gatk MarkDuplicates\n" "-"  | tee -a  $logfile
-	cp $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_added_sorted.bam} $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_dedupped.bam}
-	$samtools index $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_dedupped.bam} $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_dedupped.bai}
+	printf "\n\n#%cd F, skip gatk MarkDuplicates\n" "-"  | tee -a  $logfile $runfile
+	
+	if [ "$dryrun" == "F" ];then
+		cp $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam $outfolder/gatk3/${filename}Aligned.out_dedupped.bam
+		$samtools index $outfolder/gatk3/${filename}Aligned.out_dedupped.bam $outfolder/gatk3/${filename}Aligned.out_dedupped.bai
+	fi
+	
+	printf "cp $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam $outfolder/gatk3/${filename}Aligned.out_dedupped.bam;$samtools index $outfolder/gatk3/${filename}Aligned.out_dedupped.bam $outfolder/gatk3/${filename}Aligned.out_dedupped.bai\n" | tee -a  $runfile
+	
 fi
 
 ######
 #Step 3
 ######
 
-printf "gatk split and trim\n"  | tee -a  $logfile
+printf "\n\n#gatk split and trim\n"  | tee -a  $logfile $runfile
 
 #Split'N'Trim and reassign mapping qualities
-eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T SplitNCigarReads -R $genomefasta -I $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_dedupped.bam} -o $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_split.bam} -rf ReassignOneMappingQuality -U ALLOW_N_CIGAR_READS -RMQF 255 -RMQT 60 --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+if [ "$dryrun" == "F" ];then
+	eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T SplitNCigarReads -R $genomefasta -I $outfolder/gatk3/${filename}Aligned.out_dedupped.bam -o $outfolder/gatk3/${filename}Aligned.out_split.bam -rf ReassignOneMappingQuality -U ALLOW_N_CIGAR_READS -RMQF 255 -RMQT 60 --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+fi
+
+printf "eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T SplitNCigarReads -R $genomefasta -I $outfolder/gatk3/${filename}Aligned.out_dedupped.bam -o $outfolder/gatk3/${filename}Aligned.out_split.bam -rf ReassignOneMappingQuality -U ALLOW_N_CIGAR_READS -RMQF 255 -RMQT 60 --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1\n" | tee -a  $runfile
 
 
 #######
@@ -253,16 +338,27 @@ eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T SplitNCigarReads -R $genome
 #######
 
 #Picard ReplaceSamHeader
-printf "gatk haplotype calling\n"  | tee -a  $logfile
+printf "\n\n#gatk haplotype calling\n"  | tee -a  $logfile $runfile
 
-eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T HaplotypeCaller -R $genomefasta -I $outfolder/gatk3/${fastqfilename/fastq.gz/Aligned.out_split.bam} -dontUseSoftClippedBases -stand_call_conf 20.0 -o $outfolder/gatk3/${fastqfilename/fastq.gz/output.vcf} --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+if [ "$dryrun" == "F" ];then
+	eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T HaplotypeCaller -R $genomefasta -I $outfolder/gatk3/${filename}Aligned.out_split.bam -dontUseSoftClippedBases -stand_call_conf 20.0 -o $outfolder/gatk3/${filename}output.vcf --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+fi
+
+printf "eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T HaplotypeCaller -R $genomefasta -I $outfolder/gatk3/${filename}Aligned.out_split.bam -dontUseSoftClippedBases -stand_call_conf 20.0 -o $outfolder/gatk3/${filename}output.vcf --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1\n" | tee -a  $runfile
+
 
 #######
 #Step 7
 #######
 
 #Variant filtering
-eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T VariantFiltration -R $genomefasta -V $outfolder/gatk3/${fastqfilename/fastq.gz/output.vcf} -window 35 -cluster 3 -filterName FS -filter \"FS \> 30.0\" -filterName QD -filter \"QD \< 2.0\" -filterName DP -filter \"DP \< $dpfilter\" -o $outfolder/gatk3/${fastqfilename/fastq.gz/output.filtered.vcf} --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+printf "\n\n#gatk variant filtering\n"  | tee -a  $logfile $runfile
+
+if [ "$dryrun" == "F" ];then
+	eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T VariantFiltration -R $genomefasta -V $outfolder/gatk3/${filename}output.vcf -window 35 -cluster 3 -filterName FS -filter \"FS \> 30.0\" -filterName QD -filter \"QD \< 2.0\" -filterName DP -filter \"DP \< $dpfilter\" -o $outfolder/gatk3/${filename}output.filtered.vcf --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1
+fi
+
+printf "eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T VariantFiltration -R $genomefasta -V $outfolder/gatk3/${filename}output.vcf -window 35 -cluster 3 -filterName FS -filter \"FS \> 30.0\" -filterName QD -filter \"QD \< 2.0\" -filterName DP -filter \"DP \< $dpfilter\" -o $outfolder/gatk3/${filename}output.filtered.vcf --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1\n" | tee -a $runfile
 
 
 
@@ -270,32 +366,53 @@ eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T VariantFiltration -R $genom
 #Step 8
 #######
 
-printf "tabix indexing\n"  | tee -a  $logfile #steps after step 7 are for snpsift/snpEff analysis
+printf "\n\n#tabix indexing\n"  | tee -a  $logfile $runfile #steps after step 7 are for snpsift/snpEff analysis
 
 #zip vcf file
-$bgzip -f $outfolder/gatk3/${fastqfilename/fastq.gz/output.filtered.vcf} >> $logfile 2>&1
 
-#index vcf
-$tabix -f -p vcf $outfolder/gatk3/${fastqfilename/fastq.gz/output.filtered.vcf.gz} >> $logfile 2>&1
+if [ "$dryrun" == "F" ];then
+	$bgzip -f $outfolder/gatk3/${filename}output.filtered.vcf >> $logfile 2>&1
+
+	#index vcf
+	$tabix -f -p vcf $outfolder/gatk3/${filename}output.filtered.vcf.gz >> $logfile 2>&1
+fi
+
+printf "$bgzip -f $outfolder/gatk3/${filename}output.filtered.vcf >> $logfile 2>&1;$tabix -f -p vcf $outfolder/gatk3/${filename}output.filtered.vcf.gz >> $logfile 2>&1\n" | tee -a  $runfile
 
 #steps after step 7 are for snpsift/snpEff analysis
-printf "snpsift/snpeff annotating\n"  | tee -a  $logfile 
+printf "\n\n#snpsift annotating\n"  | tee -a  $logfile $runfile
 
 #annotate each vcf, may not needed, because there will be an extra step for -cancer annotation
-mkdir $outfolder/snpanno
 
-#annotate ID only using snpsift #may need MAF info later
-eval $java -jar $snpsift annotate -noInfo -v $knownsnp $outfolder/gatk3/${fastqfilename/fastq.gz/output.filtered.vcf.gz} > $outfolder/snpanno/${fastqfilename/fastq.gz/output.filtered.sift.annotated.vcf} 2>> $logfile
+if [ "$dryrun" == "F" ];then
+	mkdir $outfolder/snpanno
+
+	#annotate ID only using snpsift #may need MAF info later
+	eval $java -jar $snpsift annotate -noInfo -v $knownsnp $outfolder/gatk3/${filename}output.filtered.vcf.gz > $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf 2>> $logfile
+fi
+
+printf "mkdir $outfolder/snpanno;eval $java -jar $snpsift annotate -noInfo -v $knownsnp $outfolder/gatk3/${filename}output.filtered.vcf.gz > $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf 2>> $logfile\n" | tee -a  $runfile
+
 
 #annotate using snpEff for effects
-eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${fastqfilename/fastq.gz/output.filtered.sift.annotated.vcf} -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${fastqfilename/fastq.gz/output.filtered.snpeff.sift.annotated.vcf} 2>> $logfile
 
-#rename
-mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${fastqfilename/fastq.gz/snpEff_summary.genes.txt}
-mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${fastqfilename/fastq.gz/snpEff_summary.html}
+printf "\n\n#snpeff annotating\n"  | tee -a  $logfile $runfile
 
-#reformat snpeff ANN column
-perl $reformatsnpeffvcf $outfolder/snpanno/${fastqfilename/fastq.gz/output.filtered.snpeff.sift.annotated.vcf} $outfolder/snpanno/${fastqfilename/fastq.gz/output.filtered.snpeff.sift.annotated.edited.txt}
+
+if [ "$dryrun" == "F" ];then
+	eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf 2>> $logfile
+
+	#rename
+	mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${filename}snpEff_summary.genes.txt
+	mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html
+
+	#reformat snpeff ANN column
+	perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt
+	
+fi
+
+printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf 2>> $logfile;mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${filename}snpEff_summary.genes.txt;mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
+
 
 
 ######
@@ -305,15 +422,20 @@ perl $reformatsnpeffvcf $outfolder/snpanno/${fastqfilename/fastq.gz/output.filte
 #clean up to free disk space
 #if don't free up, it will take ~40G per sample, after that, about 4G per sample
 
-if [ "$keepalignment" == "F" ]
+
+if [ "$keepalignment" == "F" ] && [ -f "$fastqfile" ]
 then
-	rm $outfolder/alignment/*/*.sam
-	rm $outfolder/alignment/2pass_genomeDir/SA*
-	rm $outfolder/alignment/2pass_genomeDir/Genome
+	if [ "$dryrun" == "F" ];then
+		rm $outfolder/alignment/*/*.sam
+		rm $outfolder/alignment/2pass_genomeDir/SA*
+		rm $outfolder/alignment/2pass_genomeDir/Genome
+	fi
+	
+	printf "rm $outfolder/alignment/*/*.sam;rm $outfolder/alignment/2pass_genomeDir/SA*;rm $outfolder/alignment/2pass_genomeDir/Genome\n" | tee -a  $runfile
+	
 fi
 
 
-
-printf "done\n" | tee -a  $logfile 
+printf "\n\ndone\n" | tee -a  $logfile 
 
 date >> $logfile

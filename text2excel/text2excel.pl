@@ -21,7 +21,11 @@ use Excel::Writer::XLSX;
 ########
 
 
-my $version="0.2";
+my $version="0.3";
+
+#v0.3 by Jun
+#supports wildcards. fix a bug for no --names 
+
 
 #v0.2 by Jun
 #add new theme to wrap text, filter and freeze panel
@@ -44,11 +48,20 @@ my $version="0.2";
 my $usage="
 text2excel
 version: $version\n
-Usage: perl text2excel.pl -i file1.txt,file2.txt -n ShName1,Shname2 -t 1,2 -bfr -bfc -o result.txt\n
+Usage: 
+
+    #Combine two text files into one Excel file
+    perl text2excel.pl -i file1.txt,file2.txt -n ShName1,Shname2 -t 1,2 --theme theme1 -o result.xlsx\n
+
+    #Use wildcards for input files
+    perl text2excel.pl -i \"*.txt\" --theme theme2 -o result.xlsx\n
+
 Description: Perl script to generate compile xlsx file from individual text files.\n
 Parameters:
-	--in|-i           input file(s) separated by \",\"
+	--in|-i           input file(s) separated by \",\", support wildcards
+                           if wildcards are used, --names won't be supported.
 	--out|-o          output file
+
 	--names|-n        Sheet names
 	--txt|-t          column number starting from 0 that should be txt not general separated by \",\"
 
@@ -57,8 +70,8 @@ Parameters:
 	--color|-c        color theme to use
 
     #themes to be used
-	--theme           theme1, by AH,default [theme1]
-                      theme2, by JY, adding wrap text, filter etc.
+	--theme           theme1, by AH 
+                      theme2, by JY, adding wrap text, filter etc. Now default option. [theme2]
                       theme0, don't change format
 
 	--delim|-d        default is tab-delimited; use '' for other entries
@@ -81,13 +94,13 @@ my $params=join(" ",@ARGV);
 
 my $infiles;
 my $outfile;
-my $names;
+my $names="";
 my $txt=0;
 my $boldfrow="F";
 my $boldfcol="F";
 my $verbose;
 my $color = "";
-my $theme="theme1";
+my $theme="theme2";
 
 GetOptions(
 	
@@ -108,18 +121,6 @@ $logfile=~s/\.\w+$/_text2excel.log/;
 ####First check if the file exists & it is xlsx
 
 
-####Next create the excel object
-print "- Generating excel object: \n";
-my $excel = Excel::Writer::XLSX->new( $outfile ) or die $!;
-$excel->set_properties(
-   #title => $title,
-   author => "BI Shared Resource",
-   manager => "Andrew P. Hodges, Ph.D.",
-   comments => "Auto-generated excel file from script.",
-);
-#$excel->set_custom_property('Date generated',date(),'number');
-
-
 ######write log file
 open(LOG, ">$logfile") || die "Error write $logfile. $!";
 
@@ -133,10 +134,49 @@ print LOG "\n";
 
 
 #####Parse params
-print "- Setting up excel formatting: \n";
-my @ins = split(/,/,$infiles);
+
+my @ins;
 my $out = $outfile;
-my @names = split(/,/,$names);
+my @names;
+
+#deal with wildcard support
+if($infiles=~/\*/) {
+	#double check names for wildcards
+	if(defined $names && length($names)>0) {
+		print STDERR "ERROR:--names is not supported, when wildcard is used in --infiles $infiles.\n";
+		exit;
+	}
+	
+	foreach my $file (split(",",$infiles)) {
+		my @files=glob($file);
+		push @ins,@files;
+	}
+}
+else {
+	@ins = split(/,/,$infiles);
+	@names=split(",",$names);
+	
+	if(@names>0) {
+		if(scalar(@ins) != scalar(@names)) {
+			print STDERR "ERROR: --in $infiles (",scalar(@ins),") and --names $names (",scalar(@names),") do not match.\n";
+			exit;
+		}
+	}
+	
+}
+
+####Next create the excel object
+print "- Generating excel object: \n";
+my $excel = Excel::Writer::XLSX->new( $outfile ) or die $!;
+$excel->set_properties(
+   #title => $title,
+   author => "BI Shared Resource",
+   manager => "Andrew P. Hodges, Ph.D.",
+   comments => "Auto-generated excel file from script.",
+);
+#$excel->set_custom_property('Date generated',date(),'number');
+
+
 my @textcols = split(/,/,$txt);
 my %textcols = map { "x_".$_ => 1 } @textcols;
 my $bfrow = $boldfrow;
@@ -144,6 +184,8 @@ my $bfcol = $boldfcol;
 my $col = $color;
 
 ####Also create format blocks for the excel components
+print "- Setting up excel formatting: \n";
+
 my $formatHeader = $excel->add_format();
 
 #choice to use different theme
@@ -174,7 +216,10 @@ my $formatColtxt = $excel->add_format(
 
 my @worksheets;
 foreach my $R (keys @ins){   #index
+	
 	my $filex = $ins[$R];
+	
+	print "- - Working on $filex\n";
 	
 	#for now, just open the file & use names for sheets
 	my $sname = $filex;
@@ -192,7 +237,7 @@ foreach my $R (keys @ins){   #index
 	###apply operations to the current worksheet
 	my $i = -1; #row index
 	my $maxcol=0;
-	open IN, $filex or die $!;
+	open IN, $filex or die "ERROR:$filex not found.$!";
 	while(<IN>){
 		$i++;
 		chomp(my $string = $_);

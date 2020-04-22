@@ -11,7 +11,7 @@ use List::Util qw(min);
 ########
 
 #0.11 change procs to ppn, procs is still usable but hidden
-
+#0.12 add --asis to submit the task directly
 
 ########
 #Prerequisites
@@ -25,7 +25,7 @@ use List::Util qw(min);
 ########
 
 
-my $version="0.11";
+my $version="0.12";
 
 
 my $usage="
@@ -66,7 +66,8 @@ Parameters:
     --tandem|--td     Only used when multiple task files in input
                            Each task file needs to be successfully ran before the next one can be started
 
-
+    --asis|-a         Don't split the commands in the file. Submit the task file as it is
+	
     --runmode|-r      
     --env|-e          Use your own runing envir, e.g. to source ~/.bashrc
 	
@@ -102,6 +103,7 @@ my $verbose=1;
 my $env=0;
 my $hold;
 my $tandem=0;
+my $asis=0;
 my $name;
 
 #output
@@ -125,6 +127,7 @@ GetOptions(
 	"runmode"=> \$runmode,
 	#"hold|d=s" => \$hold, #can be implemented if needed to #PBS -W 
 	"tandem"=> \$tandem,
+	"asis|a"=> \$asis,	
 	"env|e" => \$env,
 	"verbose" => \$verbose,
 	"help|h" => sub {print STDERR $usage;exit;}
@@ -303,16 +306,25 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	open(IN,$infile) || die "Error reading $infile. $!";
 	my @command_lines;
 	
-	while(<IN>) {
-		tr/\r\n//d;
-		next if $_=~/^#/; #skip comments
-		next if length($_)==0; #skip empty lines
-		push @command_lines,$_;
+	unless($asis) {
+		while(<IN>) {
+			tr/\r\n//d;
+			next if $_=~/^#/; #skip comments
+			next if length($_)==0; #skip empty lines
+			push @command_lines,$_;
+		}
+		close IN;
+		
+		print STDERR scalar(@command_lines)," command lines found in $infile.\n\n" if $verbose;
+		print LOG scalar(@command_lines)," command lines found in $infile.\n\n";
 	}
-	close IN;
-	
-	print STDERR scalar(@command_lines)," command lines found in $infile.\n\n" if $verbose;
-	print LOG scalar(@command_lines)," command lines found in $infile.\n\n";
+	else {
+		while(<IN>) {
+			tr/\r\n//d;
+			$command_lines[0].=$_."\n";
+		}
+		close IN;
+	}
 	
 	#split command lines by # of tasks
 	my @split_command_lines=split_jobs(\@command_lines,min($task,scalar(@command_lines)));

@@ -4,12 +4,13 @@ use Getopt::Long;
 
 
 
-my $version="0.41";
+my $version="0.5";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
 #v0.4, major updates to support Firefly
 #v0.41 rnaseq-var is supported in Firefly
+#v0.5, new procedure to expand rnaseq processing functions
 
 my $usage="
 
@@ -63,31 +64,57 @@ unless (@ARGV) {
 	exit;
 }
 
+
+#functions
+
+my ($command,@params)=@ARGV;
+
+####
+#check whether to use --dev version
+####
+my $params_list=join(" ",@params);
+
+my $dev=0; #developmental version
+
+if($params_list=~/--dev/) {
+	$dev=1;
+}
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+
+#####
 #then call different scripts
+#####
 
 
+my $bs_fastq="$sbptoolsfolder/bs-fastq/bs-fastq_caller.pl";
 
-my $bs_fastq="/apps/sbptools/bs-fastq/bs-fastq_caller.pl";
+my $rnaseq_process="$sbptoolsfolder/rnaseq-process/rnaseq-process_caller.pl";
+my $rnaseq_merge="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_caller.pl";
+my $rnaseq_de="$sbptoolsfolder/rnaseq-de/rnaseq-de_caller.pl";
+my $rnaseq_summary="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_caller.pl";
 
-my $rnaseq_process="/apps/sbptools/rnaseq-process/rnaseq-process_caller.pl";
-my $rnaseq_merge="/apps/sbptools/rnaseq-merge/rnaseq-merge_caller.pl";
-my $rnaseq_de="/apps/sbptools/rnaseq-de/rnaseq-de_caller.pl";
-my $rnaseq_summary="/apps/sbptools/rnaseq-summary/rnaseq-summary_caller.pl";
+my $rnaseq_var="sh $sbptoolsfolder/rnaseq-var/gatk3_rnaseq_variant_v1.sh";
+my $rnaseq_motif="$sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
 
-my $rnaseq_var="sh /apps/sbptools/rnaseq-var/gatk3_rnaseq_variant_v1.sh";
-my $rnaseq_motif="/apps/sbptools/rnaseq-motif/rnaseq-motif_caller.pl";
+my $chipseq_process="$sbptoolsfolder/chipseq-process/chipseq-process_caller.pl";
+my $chipseq_merge="$sbptoolsfolder/chipseq-merge/chipseq-merge_caller.pl";
+my $chipseq_de="$sbptoolsfolder/chipseq-de/chipseq-de_caller.pl";
+my $chipseq_summary="$sbptoolsfolder/chipseq-summary/chipseq-summary_caller.pl";
 
-my $chipseq_process="/apps/sbptools/chipseq-process/chipseq-process_caller.pl";
-my $chipseq_merge="/apps/sbptools/chipseq-merge/chipseq-merge_caller.pl";
-my $chipseq_de="/apps/sbptools/chipseq-de/chipseq-de_caller.pl";
-my $chipseq_summary="/apps/sbptools/chipseq-summary/chipseq-summary_caller.pl";
+my $motif_finder="$sbptoolsfolder/motif-finder/motif-finder_caller.pl";
 
-my $motif_finder="/apps/sbptools/motif-finder/motif-finder_caller.pl";
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $text2excel ="perl $sbptoolsfolder/text2excel/text2excel.pl";
 
-my $mergefiles="/apps/sbptools/mergefiles/mergefiles_caller.pl";
-my $text2excel ="perl /apps/sbptools/text2excel/text2excel.pl";
-
-my $parallel_job ="perl /apps/sbptools/parallel-job/parallel-job_caller.pl";
+my $parallel_job ="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 
 my %commands2program=(
     "bs-fastq"=>$bs_fastq,
@@ -113,7 +140,6 @@ my %commands2program=(
 	"parallel-job"=>$parallel_job,
 );
 
-my ($command,@params)=@ARGV;
 
 
 if(defined $commands2program{$command}) {

@@ -12,7 +12,7 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.41";
+my $version="0.5";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -21,6 +21,7 @@ my $version="0.41";
 #v0.31, solves screen envinroment problem
 #v0.4 add find_program, and queuejob, --dev switch, add 30gb requirement
 #v0.41 option to turn off bamcoverage due to long processing time. changed cutadapt logging
+#v0.5 change alignment procedure to be compatible with more programs
 
 my $usage="
 
@@ -194,9 +195,30 @@ print LOG "\n";
 
 #test tx option
 
+#my %tx2ref=(
+#	"Human.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/Human_RSEM",
+#	"Mouse.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/Mouse_RSEM",
+#);
+
 my %tx2ref=(
-	"Human.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/Human_RSEM",
-	"Mouse.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/Mouse_RSEM",
+	"Human.B38.Ensembl84"=> { 
+		"star"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR",
+		"rsem"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/Human_RSEM",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Human/hg38/Human.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
+	"Mouse.B38.Ensembl84"=>{ 
+		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
+		"rsem"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/Mouse_RSEM",
+		"chrsize"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR/chrNameLength.txt",
+		"fasta"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.dna.primary_assembly_ucsc.fa",
+		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
+		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
+		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
+		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
 
 
@@ -449,7 +471,7 @@ else {
 		
 	
 #----------------
-#RSEM for trimmed reads
+#STAR & RSEM for trimmed reads
 
 if(defined $configattrs{"FASTQ2"}) {
 	#PE
@@ -462,11 +484,19 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample";
 		
 		my $rsemlog="$samplefolder/$sample\_rsem.log";
+		my $starlog="$samplefolder/$sample\_star.log";
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
+		#$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star --paired-end ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
+		
+		#STAR alignment
+		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." > $starlog 2>&1;";
+		
+		#RSEM 
+		$sample2workflow{$sample}.="$rsem -p 4 --paired-end --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
+		
 		
 		if($nobamcoverage==0) {
-			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample.genome.sorted.bw;";
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.out.bw;";
 		}
 	}
 }
@@ -475,16 +505,22 @@ else {
 	print STDERR "Printing RSEM SE script.\n\n" if $verbose;
 	print LOG "Printing RSEM SE script.\n\n";
 
-	#     rsem-calculate-expression [options] upstream_read_file(s) reference_name sample_name 
 	
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample";
+		my $starlog="$samplefolder/$sample\_star.log";
 		my $rsemlog="$samplefolder/$sample\_rsem.log";
 		
-		$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
+		#$sample2workflow{$sample}.="$rsem -p 4 --output-genome-bam --sort-bam-by-coordinate --star-gzipped-read-file --star ".$sample2fastq{$sample}[1]." ".$tx2ref{$tx}." $samplefolder/$sample > $rsemlog 2>&1;";
+		
+		#STAR alignment
+		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[1]." > $starlog 2>&1;";
+		
+		#RSEM process alignment
+		$sample2workflow{$sample}.="$rsem -p 4 --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
 		if($nobamcoverage==0) {
-			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample.genome.sorted.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample.genome.sorted.bw;";
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.out.bw;";
 		}
 	}
 }
