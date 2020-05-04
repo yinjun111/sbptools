@@ -21,7 +21,7 @@ my $version="0.5";
 #v0.31, solves screen envinroment problem
 #v0.4 add find_program, and queuejob, --dev switch, add 30gb requirement
 #v0.41 option to turn off bamcoverage due to long processing time. changed cutadapt logging
-#v0.5 change alignment procedure to be compatible with more programs
+#v0.5 change alignment procedure to be compatible with more programs. bamcoverage changed.
 
 my $usage="
 
@@ -48,9 +48,8 @@ Parameters:
     --ncpus           No. of cpus for each task [4]
     --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
-    --nobamcoverage   Use --nobamcoverage turn off producing bw file for bam files
-
-
+    --bamcoverage     Produce bw file for bam files [F]
+	
     --runmode|-r      Where to run the scripts, local, cluster or none [none]
                             local is to run locally using \"parallel\", recommended for Falco
                             cluster is to submit jobs to PBS queue in the HPC, recommended for Firefly
@@ -84,7 +83,7 @@ my $verbose=1;
 my $tx;
 my $task;
 my $ncpus=4;
-my $nobamcoverage=0;
+my $runbamcoverage="F";
 my $mem="40gb";
 my $runmode="none";
 
@@ -98,7 +97,7 @@ GetOptions(
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
-	"nobamcoverage" => \$nobamcoverage,	
+	"bamcoverage" => \$runbamcoverage,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		
@@ -141,7 +140,7 @@ my $fastqc=find_program("/apps/FastQC/fastqc");
 my $rsem=find_program("/apps/RSEM-1.3.1/rsem-calculate-expression");
 my $star=find_program("/apps/STAR-master/bin/Linux_x86_64/STAR");
 my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
-
+my $samtools=find_program("/apps/samtools-1.3.1/bin/samtools");
 
 
 #######
@@ -491,12 +490,15 @@ if(defined $configattrs{"FASTQ2"}) {
 		#STAR alignment
 		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." > $starlog 2>&1;";
 		
+		#bam index
+		$sample2workflow{$sample}.="$samtools index $samplefolder/$sample\_Aligned.sortedByCoord.out.bam;";
+		
 		#RSEM 
 		$sample2workflow{$sample}.="$rsem -p 4 --paired-end --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
 		
-		if($nobamcoverage==0) {
-			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.out.bw;";
+		if($runbamcoverage eq "T") {
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.sortedByCoord.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.sortedByCoord.out.bw;";
 		}
 	}
 }
@@ -515,12 +517,15 @@ else {
 		
 		#STAR alignment
 		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[1]." > $starlog 2>&1;";
+
+		#bam index
+		$sample2workflow{$sample}.="$samtools index $samplefolder/$sample\_Aligned.sortedByCoord.out.bam;";
 		
 		#RSEM process alignment
 		$sample2workflow{$sample}.="$rsem -p 4 --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
-		if($nobamcoverage==0) {
-			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.out.bw;";
+		if($runbamcoverage eq "T") {
+			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.sortedByCoord.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.sortedByCoord.out.bw;";
 		}
 	}
 }
