@@ -154,17 +154,3 @@ foreach my $comp (@comps) {
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
 close OUT;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -233,8 +233,8 @@ system("mkdir $outputfolder/results");
 #motif to region
 system("cp $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt $outputfolder/results");
 #motif enrichment
-system("cp $outputfolder/findmotifsgenome/homerResults.html $outputfolder/results/$inputfilename\_homerResults.html");
-system("cp $outputfolder/findmotifsgenome/knownResults.html $outputfolder/results/$inputfilename\_knownResults.html");
+system("cp $outputfolder/findmotifsgenome/homerResults.html $outputfolder/results/".basename($outputfolder)."_homerResults.html");
+system("cp $outputfolder/findmotifsgenome/knownResults.html $outputfolder/results/".basename($outputfolder)."_knownResults.html");
 
 
 ########

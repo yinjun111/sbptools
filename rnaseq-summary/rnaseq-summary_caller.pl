@@ -15,12 +15,14 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.4";
+my $version="0.5";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
 
 #v0.4, to be consistent with other rnaseq scripts
+#v0.5, add metascape and gsea support
+
 
 my $usage="
 
@@ -34,6 +36,7 @@ Description: Summarize rnaseq-de results and recalculate significance if needed
 3. report group avg TPM, and FPKM
 4. recalculate significance using new fc or new q
 5. merged excel file for the project
+6. Files ready for IPA/Metascape/GSEA/rnaseq-motif analyses
 
 
 Parameters:
@@ -56,13 +59,14 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --runmode|-r      Where to run the scripts, local, server or none [local]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
-	
+    --run_rnaseq-motif  Whether to run sbptools rnaseq-motif, only generate script by default
+                        Only use this tag when you are in Firefly
 	
 ";
 
 #    --verbose|-v      Verbose
+#    --runmode|-r      Where to run the scripts, local, cluster or none [local]
+#    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
 
 
 unless (@ARGV) {
@@ -89,6 +93,7 @@ my $fccutoff;
 my $qcutoff;
 my $geneinput;
 my $txinput;
+my $runrnaseqmotif;
 my $verbose=1;
 my $jobs=5;
 my $tx;
@@ -112,6 +117,8 @@ GetOptions(
 	"jobs|j=s" => \$jobs,
 	"verbose|v" => \$verbose,
 	
+	"run_rnaseq-motif"=>\$runrnaseqmotif,
+	
 	"dev" => \$dev,	
 );
 
@@ -128,8 +135,9 @@ if($dev) {
 
 my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $text2excel="$sbptoolsfolder/text2excel/text2excel.pl";
-
-
+my $metascape_gen="perl $sbptoolsfolder/metascape-gen/metascape-gen_caller.pl";
+my $gsea_gen="perl $sbptoolsfolder/gsea-gen/gsea-gen_caller.pl";
+my $rnaseq_motif="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
 
 ########
 #Code begins
@@ -142,11 +150,27 @@ if(!-e $outputfolder) {
 }
 
 $outputfolder = abs_path($outputfolder);
+my $outputfoldername = basename($outputfolder);
 
 
+#folders for gs analysis
 if(!-e "$outputfolder/forIPA") {
 	mkdir("$outputfolder/forIPA");
 }
+
+if(!-e "$outputfolder/forMetascape") {
+	mkdir("$outputfolder/forMetascape");
+}
+
+if(!-e "$outputfolder/forGSEA") {
+	mkdir("$outputfolder/forGSEA");
+}
+
+
+if(!-e "$outputfolder/for_rnaseq-motif/") {
+	mkdir("$outputfolder/for_rnaseq-motif/");
+}
+
 
 my $logfile="$outputfolder/rnaseq-summary_run.log";
 
@@ -174,6 +198,7 @@ my %tx2ref=(
 		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		"geneannogsea"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
@@ -182,6 +207,7 @@ my %tx2ref=(
 		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
+		"geneannogsea"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_tohumansymmbol_one2one.txt",		
 		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
 
@@ -430,6 +456,8 @@ foreach my $folder (sort keys %folder2genede) {
 }
 
 
+
+
 #print OUT used genes
 
 open(OUT,">$outputfolder/genes_sel.txt") || die $!;
@@ -458,6 +486,7 @@ foreach my $gene (sort keys %genes) {
 }
 close OUT;
 
+
 #reformat gene de
 my @defiles;
 foreach my $folder (sort keys %folder2genede) {
@@ -482,7 +511,7 @@ foreach my $folder (sort keys %folder2genede) {
 
 
 #merge gene de results
-system("$mergefiles -m $outputfolder/genes_sel.txt -i ".join(",",@defiles)." -o $outputfolder/rnaseq-summary_GeneDEMerged.txt");
+system("$mergefiles -m $outputfolder/genes_sel.txt -i ".join(",",@defiles)." -o $outputfolder/rnaseq-summary_GeneDEMerged.txt -n T");
 
 print STDERR "Calculating group average for gene.\n" if $verbose;
 print LOG "Calculating group average for gene.\n";
@@ -498,9 +527,8 @@ foreach my $file ("gene.results.merged.fpkm.txt","gene.results.merged.tpm.txt") 
 	
 	#copy files
 	system("cp $rnaseqmerge/$file $outputfolder/");
-	#system("$mergefiles -m $outputfolder/$file -i "..");
 	
-	system("$mergefiles -m $outputfolder/genes_sel.txt -i $rnaseqmerge/$file -o $outputfolder/$outfile0");
+	system("$mergefiles -m $outputfolder/genes_sel.txt -i $rnaseqmerge/$file -o $outputfolder/$outfile0 -n T"); #edited here to remove extra rownames
 	
 	my $outfile1=$file;
 	my $outfile2=$file;
@@ -552,9 +580,56 @@ print LOG "Copy gene annotation.\n";
 system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt;");
 system("cp ".$tx2ref{$tx}{"txanno"}." $outputfolder/txanno.txt;");
 
-system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/geneanno_sel.txt");
+system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/geneanno_sel.txt -n T");
 
 
+#####
+#GS Analysis
+#####
+
+#IPA
+print STDERR "Files ready for IPA analysis are in: $outputfolder/forIPA\n" if $verbose;
+print LOG "Files ready for IPA analysis are in: $outputfolder/forIPA\n";
+
+#Metascape
+
+print STDERR "Generate files for Metascape analysis.\n" if $verbose;
+print LOG "Generate files for Metascape analysis.\n";
+system("$metascape_gen -i $outputfolder/rnaseq-summary_GeneDESigs.txt -o $outputfolder/forMetascape/$outputfoldername\_forMetascape.txt");
+
+print STDERR "Files ready for Metascape analysis are in: $outputfolder/forMetascape/\n" if $verbose;
+print LOG "Files ready for Metascape analysis are in: $outputfolder/forMetascape/\n";
+
+#GSEA
+
+print STDERR "Generate files for GSEA analysis.\n" if $verbose;
+print LOG "Generate files for GSEA analysis.\n";
+system("$gsea_gen -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group --ga ".$tx2ref{$tx}{"geneannogsea"}." -g $outputfolder/forGSEA/$outputfoldername.gct -c $outputfolder/forGSEA/$outputfoldername.cls");
+
+print STDERR "File ready for GSEA analysis is: $outputfolder/forGSEA/\n" if $verbose;
+print LOG "File ready for GSEA analysis is: $outputfolder/forGSEA/\n";
+
+#rnaseq-motif
+print STDERR "Generate files for rnaseq-motif analysis.\n" if $verbose;
+print LOG "Generate files for rnaseq-motif analysis.\n";
+
+
+foreach my $folder (sort keys %folder2genede) {
+	my $runaseqmotifcmd="$rnaseq_motif --ge $folder2dir{$folder}/$folder2genede{$folder} --promoter longesttx -o $outputfolder/for_rnaseq-motif/$folder --tx $tx -v";
+	if($runrnaseqmotif) {
+		system($runaseqmotifcmd." -r cluster");
+		print LOG $runaseqmotifcmd." -r cluster\n";
+	}
+	else {
+		system($runaseqmotifcmd);
+		print LOG $runaseqmotifcmd,"\n";
+	}
+}
+
+system("cat $outputfolder/for_rnaseq-motif/*/scripts/*.sh > $outputfolder/for_rnaseq-motif/run_rnaseq-motif.sh");
+
+print STDERR "File ready for rnaseq-motif analysis is: $outputfolder/for_rnaseq-motif/\n" if $verbose;
+print LOG "File ready for rnaseq-motif analysis is: $outputfolder/for_rnaseq-motif/\n";
 
 
 ####
@@ -593,7 +668,7 @@ my $timestamp=substr($now,0,10);
 
 system("$text2excel -i $outputfolder/rnaseq-summary_GeneDEMerged_anno.txt,$outputfolder/rnaseq-summary_GeneDESigs_anno.txt,$outputfolder/gene.results.merged.fpkm.groupavg.sel_anno.txt,$outputfolder/gene.results.merged.tpm.groupavg.sel_anno.txt -n GeneDE,GeneDESigs,FPKM_Group,TPM_Group -o $outputfolder/rnaseq-summary_all_$timestamp.xlsx --theme theme2");
 
-
+print STDERR "\nResults summary is in $outputfolder/rnaseq-summary_all_$timestamp.xlsx.\n";
 
 ####
 #work on tx later

@@ -8,26 +8,18 @@ use List::Util qw(sum);
 #CutAdapt+FASTQC+RSEM+STAR
 
 
-########
-#Prerequisites
-########
-
-#my $sbptools=locate_cmd("sbptools","/usr/bin/sbptools");
-#my $motiffinder="$sbptools motif-finder"; #improve compatibility
-
-#Dev version
-my $sbptools=locate_cmd("sbptools","/home/jyin/Projects/Pipeline/sbptools/sbptools_caller.pl");
-my $motiffinder="$sbptools motif-finder"; #improve compatibility
 
 ########
 #Interface
 ########
 
 
-my $version="0.21";
+my $version="0.3";
 
 #v0.2, add system run
 #v0.21, add locate_cmd
+#V0.3, add --dev
+
 
 my $usage="
 
@@ -94,6 +86,7 @@ my $outputfolder;
 
 my $runmode="none";
 my $jobs=5;
+my $dev=0;
 my $verbose;
 
 GetOptions(
@@ -112,12 +105,31 @@ GetOptions(
 	"runmode|r=s" => \$runmode,	
 	"jobs|j=s" => \$jobs,	
 	"verbose|v" => \$verbose,
+	
+	"dev" => \$dev,
 );
 
 
 my %promoters=map {$_,1} split(",",$promoter);
 my %des=map {$_,1} split(",",$de);
 
+
+########
+#Prerequisites
+########
+
+#my $sbptools=locate_cmd("sbptools","/usr/bin/sbptools");
+#my $motiffinder="$sbptools motif-finder"; #improve compatibility
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#Dev version
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+
+my $motiffinder="perl $sbptoolsfolder/motif-finder/motif-finder_caller.pl"; #improve compatibility
+my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
 
 ########
 #Code begins
@@ -161,8 +173,8 @@ my %tx2ref=(
 		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
-		"promoter_alltx"=>"/data/jyin/Databases/Ensembl/v84/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",
-		"promoter_longesttx"=>"/data/jyin/Databases/Ensembl/v84/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
+		"promoter_alltx"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",
+		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
 	
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
@@ -172,8 +184,8 @@ my %tx2ref=(
 		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt",
-		"promoter_alltx"=>"/data/jyin/Databases/Ensembl/v84/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",		
-		"promoter_longesttx"=>"/data/jyin/Databases/Ensembl/v84/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
+		"promoter_alltx"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",		
+		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
 		
 );
 
@@ -319,8 +331,10 @@ if(defined $genelist && length($genelist)>0) {
 	my $outfile;
 	
 	if(defined $promoters{"alltx"}) {
-		$outfile=basename($genelist);
-		$outfile=~s/\.\w+$/_alltx_promoter.bed/;
+		#$outfile=basename($genelist);
+		#$outfile=~s/\.\w+$/_alltx_promoter.bed/;
+
+		$outfile=basename($outputfolder)."_alltx_promoter.bed";
 
 		open(OUT,">$outputfolder/$outfile") || die $!;
 		foreach my $gene (sort keys %genes_list) {
@@ -337,8 +351,10 @@ if(defined $genelist && length($genelist)>0) {
 	}
 	
 	if(defined $promoters{"longesttx"}) {
-		$outfile=basename($genelist);
-		$outfile=~s/\.\w+$/_longesttx_promoter.bed/;
+		#$outfile=basename($genelist);
+		#$outfile=~s/\.\w+$/_longesttx_promoter.bed/;
+		
+		$outfile=basename($outputfolder)."_longesttx_promoter.bed";
 
 		open(OUT,">$outputfolder/$outfile") || die $!;
 		foreach my $gene (sort keys %genes_list) {
@@ -397,9 +413,10 @@ elsif(defined $genede && length($genede)>0) {
 		if(defined $genes_de{$dechoice}) {
 	
 			if(defined $promoters{"alltx"}) {
-				$outfile=basename($genede);
-				$outfile=~s/\.\w+$/_$dechoice\_alltx_promoter.bed/;
-
+				#$outfile=basename($genede);
+				#$outfile=~s/\.\w+$/_$dechoice\_alltx_promoter.bed/;
+				$outfile=basename($outputfolder)."_$dechoice\_alltx_promoter.bed";
+				
 				open(OUT,">$outputfolder/$outfile") || die $!;
 				foreach my $gene (sort keys %{$genes_de{$dechoice}}) {
 					if(defined $gene2promoter_alltx{$gene}) {
@@ -415,8 +432,10 @@ elsif(defined $genede && length($genede)>0) {
 			}
 			
 			if(defined $promoters{"longesttx"}) {
-				$outfile=basename($genede);
-				$outfile=~s/\.\w+$/_$dechoice\_longesttx_promoter.bed/;
+				#$outfile=basename($genede);
+				#$outfile=~s/\.\w+$/_$dechoice\_longesttx_promoter.bed/;
+				
+				$outfile=basename($outputfolder)."_$dechoice\_longesttx_promoter.bed";
 
 				open(OUT,">$outputfolder/$outfile") || die $!;
 				foreach my $gene (sort keys %{$genes_de{$dechoice}}) {
@@ -478,6 +497,9 @@ my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptf
 if($runmode eq "none") {
 	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
 	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	
+	print STDERR "\nTo run in cluster, in shell type:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
+	print LOG "\nTo run in cluster, in shell type:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
 }
 elsif($runmode eq "local") {
 	#local mode
@@ -497,10 +519,10 @@ if($runmode eq "system") {
 	
 	system("sh $scriptfile1");
 }
-elsif($runmode eq "server") {
-	#server mode
-	
-	#implement for firefly later
+elsif($runmode eq "cluster") {
+	#cluster mode	
+	print STDERR "\nStart running in cluster using:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
+	system("$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r");
 }
 
 
