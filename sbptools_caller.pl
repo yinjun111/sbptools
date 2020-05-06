@@ -4,7 +4,7 @@ use Getopt::Long;
 
 
 
-my $version="0.5";
+my $version="0.5beta";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
@@ -30,7 +30,9 @@ Parameters:
     rnaseq-summary    Summarize RNA-Seq DE results
 
     rnaseq-var        RNA-seq variant calling pipeline
-
+    rnaseq-motif      RNA-seq TFBS motif finding pipeline
+    motif-finder      Transcription factor binding motif prediction
+	
     mergefiles        Use a model file to merge different files together
     text2excel        Build excel file using text file (by Andrew Hodges)
 
@@ -42,14 +44,11 @@ Parameters:
     ########
     #Supported only in Falco
     ########	
-    rnaseq-motif      RNA-seq TFBS motif finding pipeline
-    
+
     chipseq-process   ChIP-seq QC, Align, and Peak Calling
     chipseq-merge     Summarize ChIP-Seq results
     chipseq-de        Perform DE analysis for ChIP-Seq
     chipseq-summary   Summarize ChIP-seq DE results
-
-    motif-finder      Transcription factor binding motif prediction
 	
     bs-fastq          Download and merge FASTQ files from Basespace	
 

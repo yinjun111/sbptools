@@ -198,7 +198,7 @@ my %tx2ref=(
 		"gtf"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
-		"geneannogsea"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
+		#"geneannogsea"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt"},
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
@@ -207,7 +207,7 @@ my %tx2ref=(
 		"gtf"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
 		"homeranno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_homeranno.txt",
 		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
-		"geneannogsea"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_tohumansymmbol_one2one.txt",		
+		#"geneannogsea"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_tohumansymmbol_one2one.txt",		
 		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt"}
 );
 
@@ -219,6 +219,22 @@ else {
 	print STDERR "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n" if $verbose;
 	print LOG "ERROR:$tx not defined. Currently only supports ",join(",",sort keys %tx2ref),"\n\n";
 }
+
+
+#cutoffs to report
+##current cutoff
+##FC2, bhp005
+##FC1.5, bhp005
+##FC4, bhp005
+##FC2, bhp001
+
+my %report_cutoffs=(
+	"FC2BHP005"=> [1,0.05],
+	"FC15BHP005"=> [0.585,0.05],
+	"FC4BHP005"=> [2,0.05],
+	"FC2BHP001"=> [1,0.01],
+	"FC4BHP001"=> [2,0.01],
+);
 
 
 #Files for merging
@@ -391,6 +407,8 @@ my %folder2genesig;
 my %folder2geneinfo;
 my %folder2genetitle;
 
+my %cutoff_summary;
+
 foreach my $folder (sort keys %folder2genede) {
 
 	print STDERR "Processing ",$folder2dir{$folder}."/".$folder2genede{$folder},"\n" if $verbose;
@@ -442,8 +460,20 @@ foreach my $folder (sort keys %folder2genede) {
 						$array[5]=0;
 					}
 				}
+				
+				#summary for different cutoffs
+				foreach my $cutoff (sort keys %report_cutoffs) {
+					if($array[1] >= $report_cutoffs{$cutoff}[0] && $array[4] < $report_cutoffs{$cutoff}[1]) {
+						$cutoff_summary{$cutoff}{$folder}{1}++;
+					}
+					elsif($array[1] <= -$report_cutoffs{$cutoff}[0] && $array[4] < $report_cutoffs{$cutoff}[1]) {
+						$cutoff_summary{$cutoff}{$folder}{-1}++;
+					}
+				}
+				
 			}
 			
+			$cutoff_summary{"current"}{$folder}{$array[5]}++;
 			$folder2genesig{$folder}{$array[0]}=$array[5];
 			$folder2geneinfo{$folder}{$array[0]}=join("\t",@array);
 		}
@@ -456,6 +486,29 @@ foreach my $folder (sort keys %folder2genede) {
 }
 
 
+#Summary of No. of DE Genes
+
+foreach my $cutoff (sort keys %report_cutoffs,"current") {
+	my $cutoffsumfile="$outputfolder/rnaseq-summary_GeneDESigs_summary_$cutoff.txt";
+	open(OUT,">$cutoffsumfile") || die $!;
+	print OUT "Comparisons_$cutoff\tNo. of Up-Regulated Genes\tNo. of Down-Regulated Genes\n";
+	foreach my $folder (sort keys %folder2genede) {
+		print OUT $folder,"\t";
+		if(defined $cutoff_summary{$cutoff}{$folder}{1}) {
+			print OUT $cutoff_summary{$cutoff}{$folder}{1},"\t";
+		}
+		else {
+			print OUT "0\t";
+		}
+		if(defined $cutoff_summary{$cutoff}{$folder}{-1}) {
+			print OUT $cutoff_summary{$cutoff}{$folder}{-1},"\n";
+		}
+		else {
+			print OUT "0\n";
+		}
+	}
+	close OUT;
+}
 
 
 #print OUT used genes
@@ -604,10 +657,10 @@ print LOG "Files ready for Metascape analysis are in: $outputfolder/forMetascape
 
 print STDERR "Generate files for GSEA analysis.\n" if $verbose;
 print LOG "Generate files for GSEA analysis.\n";
-system("$gsea_gen -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group --ga ".$tx2ref{$tx}{"geneannogsea"}." -g $outputfolder/forGSEA/$outputfoldername.gct -c $outputfolder/forGSEA/$outputfoldername.cls");
+system("$gsea_gen -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group -g $outputfolder/forGSEA/$outputfoldername.gct -c $outputfolder/forGSEA/$outputfoldername.cls");
 
-print STDERR "File ready for GSEA analysis is: $outputfolder/forGSEA/\n" if $verbose;
-print LOG "File ready for GSEA analysis is: $outputfolder/forGSEA/\n";
+print STDERR "Files ready for GSEA analysis are in: $outputfolder/forGSEA/\n" if $verbose;
+print LOG "Files ready for GSEA analysis are in: $outputfolder/forGSEA/\n";
 
 #rnaseq-motif
 print STDERR "Generate files for rnaseq-motif analysis.\n" if $verbose;
@@ -628,8 +681,8 @@ foreach my $folder (sort keys %folder2genede) {
 
 system("cat $outputfolder/for_rnaseq-motif/*/scripts/*.sh > $outputfolder/for_rnaseq-motif/run_rnaseq-motif.sh");
 
-print STDERR "File ready for rnaseq-motif analysis is: $outputfolder/for_rnaseq-motif/\n" if $verbose;
-print LOG "File ready for rnaseq-motif analysis is: $outputfolder/for_rnaseq-motif/\n";
+print STDERR "Files ready for rnaseq-motif analysis are in: $outputfolder/for_rnaseq-motif/\n" if $verbose;
+print LOG "Files ready for rnaseq-motif analysis are in: $outputfolder/for_rnaseq-motif/\n";
 
 
 ####

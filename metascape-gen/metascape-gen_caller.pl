@@ -8,7 +8,7 @@ use File::Basename qw(basename);
 #Updates
 ########
 
-
+#v0.2, add option to submit each exp separately
 
 ########
 #Prerequisites
@@ -22,7 +22,7 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.1";
+my $version="0.2";
 
 
 my $usage="
@@ -127,6 +127,18 @@ print OUT "#Comparison\tDE Genes\n";
 foreach my $comp (@comps) {
 	if(defined $comp2gene{$comp}{"both"}) {
 		print OUT $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"both"}}),"\n";
+		
+		#output for each exp
+		my $outfile_exp_both=$outfile;
+		$outfile_exp_both=~s/(\.\w+)$/_$comp\_both$1/;
+		
+		open(OUT_EXP,">$outfile_exp_both") || die $!;
+		
+		print OUT_EXP $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"both"}}),"\n";
+		print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
+		
+		close OUT_EXP;
+		
 	}
 }
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
@@ -138,6 +150,18 @@ print OUT "#Comparison\tDE Genes\n";
 foreach my $comp (@comps) {
 	if(defined $comp2gene{$comp}{"up"}) {
 		print OUT $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
+		
+		#output for each exp
+		my $outfile_exp_up=$outfile;
+		$outfile_exp_up=~s/(\.\w+)$/_$comp\_up$1/;
+		
+		open(OUT_EXP,">$outfile_exp_up") || die $!;
+		
+		print OUT_EXP $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
+		print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
+		
+		close OUT_EXP;
+
 	}
 }
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
@@ -149,6 +173,18 @@ print OUT "#Comparison\tDE Genes\n";
 foreach my $comp (@comps) {
 	if(defined $comp2gene{$comp}{"down"}) {
 		print OUT $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
+
+		#output for each exp
+		my $outfile_exp_down=$outfile;
+		$outfile_exp_down=~s/(\.\w+)$/_$comp\_down$1/;
+		
+		open(OUT_EXP,">$outfile_exp_down") || die $!;
+		
+		print OUT_EXP $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
+		print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
+		
+		close OUT_EXP;
+		
 	}
 }
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
