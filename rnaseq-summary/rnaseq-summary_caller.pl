@@ -668,7 +668,9 @@ print LOG "Generate files for rnaseq-motif analysis.\n";
 
 
 foreach my $folder (sort keys %folder2genede) {
-	my $runaseqmotifcmd="$rnaseq_motif --ge $folder2dir{$folder}/$folder2genede{$folder} --promoter longesttx -o $outputfolder/for_rnaseq-motif/$folder --tx $tx -v";
+	#use new de file
+	my $runaseqmotifcmd="$rnaseq_motif --ge $outputfolder/$folder\_GeneDEreformated.txt --promoter longesttx -o $outputfolder/for_rnaseq-motif/$folder --tx $tx -v";
+
 	if($runrnaseqmotif) {
 		system($runaseqmotifcmd." -r cluster");
 		print LOG $runaseqmotifcmd." -r cluster\n";
