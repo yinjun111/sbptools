@@ -4,13 +4,14 @@ use Getopt::Long;
 
 
 
-my $version="0.5beta";
+my $version="0.51";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
 #v0.4, major updates to support Firefly
 #v0.41 rnaseq-var is supported in Firefly
 #v0.5, new procedure to expand rnaseq processing functions
+#v0.51, update rnaseq-var to v2
 
 my $usage="
 
@@ -35,6 +36,8 @@ Parameters:
 	
     mergefiles        Use a model file to merge different files together
     text2excel        Build excel file using text file (by Andrew Hodges)
+
+    gsea-gen          Generate files ready for GSEA analysis (by Andrew Hodges)
 
     ########
     #Supported only in Firefly
@@ -100,8 +103,10 @@ my $rnaseq_merge="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_caller.pl";
 my $rnaseq_de="$sbptoolsfolder/rnaseq-de/rnaseq-de_caller.pl";
 my $rnaseq_summary="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_caller.pl";
 
-my $rnaseq_var="sh $sbptoolsfolder/rnaseq-var/gatk3_rnaseq_variant_v1.sh";
+my $rnaseq_var="sh $sbptoolsfolder/rnaseq-var/rnaseq-var_caller.sh";
 my $rnaseq_motif="$sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
+
+my $gsea_gen="perl $sbptoolsfolder/gsea-gen/gsea-gen_caller.pl";
 
 my $chipseq_process="$sbptoolsfolder/chipseq-process/chipseq-process_caller.pl";
 my $chipseq_merge="$sbptoolsfolder/chipseq-merge/chipseq-merge_caller.pl";
@@ -125,6 +130,7 @@ my %commands2program=(
 
 	"rnaseq-var"=>$rnaseq_var,
 	"rnaseq-motif"=>$rnaseq_motif,
+	"gsea-gen"=>$gsea_gen,
 	
     "chipseq-process"=>$chipseq_process,
     "chipseq-merge"=>$chipseq_merge,

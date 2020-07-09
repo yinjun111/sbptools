@@ -32,12 +32,14 @@ my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.p
 ########
 
 
-my $version="0.14";
+my $version="0.2";
 
 #v0.11, add mouse motifs
 #v0.12, update script directory
 #v0.13, add results folder
 #v0.14, add locate_cmd
+#v0.2, support background file
+
 
 my $usage="
 
@@ -52,6 +54,7 @@ Parameters:
 
     --in|-i           Input bed file
     --output|-o       Output folder
+    --bg|-b           Background bed file (optional)
 	
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
@@ -78,6 +81,7 @@ my $params=join(" ",@ARGV);
 
 my $inputfile;
 my $outputfolder;
+my $bgfile;
 my $tx;
 my $tfbs="F";
 my $verbose=1;
@@ -88,7 +92,9 @@ my $pcol=4; #hidden param
 GetOptions(
 	"in|i=s" => \$inputfile,
 	"output|o=s" => \$outputfolder,
-
+	"bg|b=s" => \$bgfile,
+	
+	
 	"tx|t=s" => \$tx,	
 	#"runmode|r=s" => \$runmode,		
 	"verbose|v=s" => \$verbose,
@@ -115,6 +121,12 @@ mkdir("$outputfolder/findmotifsbed"); #bed themselves
 #input file
 $inputfile=abs_path($inputfile);
 my $inputfile_basename=basename($inputfile);
+
+my $bgfile_basename;
+if(defined $bgfile && length($bgfile)>0) {
+	$bgfile=abs_path($bgfile);
+	$bgfile_basename=basename($bgfile);
+}
 
 
 my $logfile="$outputfolder/motif-finder_run.log";
@@ -179,6 +191,12 @@ if($inputfile_basename=~/(.+)\.bed/) {
 	$inputfilename=$1;
 }
 
+my $bgfilename;
+if(defined $bgfile && length($bgfile)>0) {
+	if($bgfile_basename=~/(.+)\.bed/) {
+		$bgfilename=$1;
+	}
+}
 
 print STDERR "Identify motifs for $inputfile.\n\n" if $verbose;
 print LOG "Identify motifs for $inputfile.\n\n";
@@ -207,6 +225,16 @@ print LOG "$bed2pos $inputfile -o $outputfolder/$inputfilename.pos\n\n";
 system("$bed2pos $inputfile -o $outputfolder/$inputfilename.pos");
 
 
+if(defined $bgfile && length($bgfile)>0) {
+	print STDERR "Convert $bgfile into $outputfolder/$bgfilename.pos\n\n" if $verbose;
+	print LOG "Convert $bgfile into $outputfolder/$bgfilename.pos\n\n";
+
+	print LOG "$bed2pos $bgfile -o $outputfolder/$bgfilename.pos\n\n";
+	system("$bed2pos $bgfile -o $outputfolder/$bgfilename.pos");
+}	
+
+
+
 #######
 #Motif enrichment analysis
 #######
@@ -215,9 +243,14 @@ print STDERR "Perform motif enrichment test for $outputfolder/$inputfilename.pos
 print LOG "Perform motif enrichment test for $outputfolder/$inputfilename.pos\n\n";
 
 
-print LOG "$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed\n\n";
-system("$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed");
-
+if(defined $bgfile && length($bgfile)>0) {
+	print LOG "$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -bg $outputfolder/$bgfilename.pos -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed\n\n";
+	system("$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -bg $outputfolder/$bgfilename.pos -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed");
+}
+else {
+	print LOG "$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed\n\n";
+	system("$findmotifsgenome $outputfolder/$inputfilename.pos $genomeversion $outputfolder/findmotifsgenome -size given -preparsedDir $outputfolder/findmotifsgenome/preparsed");
+}
 
 
 #remove temporary folder
