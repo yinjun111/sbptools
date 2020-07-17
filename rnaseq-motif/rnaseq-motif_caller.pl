@@ -14,11 +14,12 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.3";
+my $version="0.4";
 
 #v0.2, add system run
 #v0.21, add locate_cmd
 #V0.3, add --dev
+#v0.4, add background for motif finder
 
 
 my $usage="
@@ -130,6 +131,8 @@ if($dev) {
 
 my $motiffinder="perl $sbptoolsfolder/motif-finder/motif-finder_caller.pl"; #improve compatibility
 my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
+my $rnaseq_motif_annotate="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_annotate.pl";
+
 
 ########
 #Code begins
@@ -174,7 +177,9 @@ my %tx2ref=(
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
 		"promoter_alltx"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",
-		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
+		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed",
+		"promoter_alltxanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_promoter_1kup100down_alltxs_nr_intersect_homer.Knownmotifs_anno.txt"
+		},
 	
 	"Mouse.B38.Ensembl84"=>{ 
 		"star"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mouse.B38.Ensembl84_STAR",
@@ -185,7 +190,9 @@ my %tx2ref=(
 		"geneanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_tx_anno.txt",
 		"promoter_alltx"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_alltxs_nr.bed",		
-		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed"},
+		"promoter_longesttx"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_longesttxs_nr.bed",
+		"promoter_alltxanno"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc_promoter_1kup100down_alltxs_nr_intersect_homer.Knownmotifs_anno.txt"
+		},
 		
 );
 
@@ -347,7 +354,7 @@ if(defined $genelist && length($genelist)>0) {
 		}
 		close OUT;
 		
-		$bedfiles{"$outputfolder/$outfile"}++;
+		$bedfiles{"$outputfolder/$outfile"}=$tx2ref{$tx}{"promoter_alltx"};
 	}
 	
 	if(defined $promoters{"longesttx"}) {
@@ -367,7 +374,7 @@ if(defined $genelist && length($genelist)>0) {
 		}
 		close OUT;
 		
-		$bedfiles{"$outputfolder/$outfile"}++;
+		$bedfiles{"$outputfolder/$outfile"}=$tx2ref{$tx}{"promoter_longesttx"};
 	}	
 }
 elsif(defined $genede && length($genede)>0) {
@@ -428,7 +435,7 @@ elsif(defined $genede && length($genede)>0) {
 				}
 				close OUT;
 				
-				$bedfiles{"$outputfolder/$outfile"}++;
+				$bedfiles{"$outputfolder/$outfile"}=$tx2ref{$tx}{"promoter_alltx"};
 			}
 			
 			if(defined $promoters{"longesttx"}) {
@@ -448,7 +455,7 @@ elsif(defined $genede && length($genede)>0) {
 				}
 				close OUT;
 				
-				$bedfiles{"$outputfolder/$outfile"}++;
+				$bedfiles{"$outputfolder/$outfile"}=$tx2ref{$tx}{"promoter_longesttx"};
 			}
 		}
 	}
@@ -468,7 +475,17 @@ foreach my $bedfile (sort keys %bedfiles) {
 	
 	$outfoldername=~s/\.\w+$//;
 	
-	print OUT "$motiffinder -i $bedfile -o $outputfolder/$outfoldername --tx $tx\n";
+	if(!-e "$outputfolder/$outfoldername") {
+		mkdir("$outputfolder/$outfoldername");
+		mkdir("$outputfolder/$outfoldername/findmotifsbed");
+	}
+
+
+	#print OUT "$motiffinder -i $bedfile -o $outputfolder/$outfoldername --tx $tx\n";	
+	#v0.4 update, add all promoters to bg
+	#v0.4, get annotation from pre-computed file
+	print OUT "$rnaseq_motif_annotate -i $bedfile -a ",$tx2ref{$tx}{"promoter_alltxanno"}," -o $outputfolder/$outfoldername/findmotifsbed/$outfoldername\_motif_homer_anno.txt;";
+	print OUT "$motiffinder -i $bedfile -b ",$bedfiles{$bedfile}," -o $outputfolder/$outfoldername --tx $tx --annobed F\n";
 }
 
 close OUT;

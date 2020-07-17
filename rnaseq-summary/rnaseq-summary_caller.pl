@@ -15,14 +15,14 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.5";
+my $version="0.51";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
 
 #v0.4, to be consistent with other rnaseq scripts
 #v0.5, add metascape and gsea support
-
+#v0.51, pass --dev to other programs
 
 my $usage="
 
@@ -137,7 +137,8 @@ my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $text2excel="$sbptoolsfolder/text2excel/text2excel.pl";
 my $metascape_gen="perl $sbptoolsfolder/metascape-gen/metascape-gen_caller.pl";
 my $gsea_gen="perl $sbptoolsfolder/gsea-gen/gsea-gen_caller.pl";
-my $rnaseq_motif="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
+my $rnaseq_motif="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl".scalar(add_dev($dev));
+
 
 ########
 #Code begins
@@ -797,4 +798,16 @@ sub build_timestamp {
 	
 	return $now;
 }
+
+sub add_dev {
+	my $dev=shift @_;
+	
+	if($dev) {
+		return " --dev";
+	}
+	else {
+		return "";
+	}
+}
+
 

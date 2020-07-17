@@ -32,13 +32,14 @@ my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.p
 ########
 
 
-my $version="0.2";
+my $version="0.21";
 
 #v0.11, add mouse motifs
 #v0.12, update script directory
 #v0.13, add results folder
 #v0.14, add locate_cmd
 #v0.2, support background file
+#v0.21, add --annobed option
 
 
 my $usage="
@@ -55,6 +56,7 @@ Parameters:
     --in|-i           Input bed file
     --output|-o       Output folder
     --bg|-b           Background bed file (optional)
+    --annobed|-a      Whether to annotate bed file with motifs [T]
 	
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
@@ -83,7 +85,7 @@ my $inputfile;
 my $outputfolder;
 my $bgfile;
 my $tx;
-my $tfbs="F";
+my $annobed="T";
 my $verbose=1;
 my $pcol=4; #hidden param
 #my $runmode="none";
@@ -93,6 +95,7 @@ GetOptions(
 	"in|i=s" => \$inputfile,
 	"output|o=s" => \$outputfolder,
 	"bg|b=s" => \$bgfile,
+	"annobed|a=s" => \$annobed,
 	
 	
 	"tx|t=s" => \$tx,	
@@ -198,20 +201,26 @@ if(defined $bgfile && length($bgfile)>0) {
 	}
 }
 
-print STDERR "Identify motifs for $inputfile.\n\n" if $verbose;
-print LOG "Identify motifs for $inputfile.\n\n";
 
-print LOG "cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed\n\n";
-system("cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed");
+if($annobed eq "T") {
 
-#intersect bed
-print LOG "$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt\n\n";
-system("$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt");
+	print STDERR "Identify motifs for $inputfile.\n\n" if $verbose;
+	print LOG "Identify motifs for $inputfile.\n\n";
 
-#summarize result
-print LOG "$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt\n\n";
-system("$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt");
+	print LOG "cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed\n\n";
+	system("cut -f 1-4 $inputfile > $outputfolder/$inputfilename\_selected.bed");
 
+	#intersect bed
+	print LOG "$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt\n\n";
+	system("$intersect_multi_bed $outputfolder/$inputfilename\_selected.bed \"".$tx2ref{$tx}{"homermotifs"}."\" $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt");
+
+	#summarize result
+	print LOG "$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt\n\n";
+	system("$motif_intersect_to_txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer.txt $outputfolder/findmotifsbed/$inputfilename\_intersect_homer_anno.txt");
+}
+else {
+	print LOG "Skip intersect_multi_bed, because --annobed $annobed.\n\n";
+}
 
 
 ########
@@ -254,9 +263,11 @@ else {
 
 
 #remove temporary folder
-print LOG "rm -R $outputfolder/findmotifsgenome/preparsed\n\n";
-system("rm -R $outputfolder/findmotifsgenome/preparsed");
-
+if(-e "$outputfolder/findmotifsgenome/preparsed") {
+	#bg doesn't have preparsed
+	print LOG "rm -R $outputfolder/findmotifsgenome/preparsed\n\n";
+	system("rm -R $outputfolder/findmotifsgenome/preparsed");
+}
 
 #######
 #Move to results folder

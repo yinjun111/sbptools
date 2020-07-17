@@ -32,6 +32,7 @@ Parameters:
 
     rnaseq-var        RNA-seq variant calling pipeline
     rnaseq-motif      RNA-seq TFBS motif finding pipeline
+    rnaseq-motif-summary  RNA-seq TFBS motif finding results summary	
     motif-finder      Transcription factor binding motif prediction
 	
     mergefiles        Use a model file to merge different files together
@@ -105,6 +106,7 @@ my $rnaseq_summary="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_caller.pl";
 
 my $rnaseq_var="sh $sbptoolsfolder/rnaseq-var/rnaseq-var_caller.sh";
 my $rnaseq_motif="$sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
+my $rnaseq_motif_summary="$sbptoolsfolder/rnaseq-motif-summary/rnaseq-motif-summary.pl";
 
 my $gsea_gen="perl $sbptoolsfolder/gsea-gen/gsea-gen_caller.pl";
 
@@ -130,6 +132,7 @@ my %commands2program=(
 
 	"rnaseq-var"=>$rnaseq_var,
 	"rnaseq-motif"=>$rnaseq_motif,
+	"rnaseq-motif-summary"=>$rnaseq_motif_summary,
 	"gsea-gen"=>$gsea_gen,
 	
     "chipseq-process"=>$chipseq_process,
