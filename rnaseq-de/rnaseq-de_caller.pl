@@ -2,7 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 
 
 
@@ -11,13 +11,13 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #version 0.2a, add r version log
 #v0.3 add runmode
 #v0.31, solves screen envinroment problem
 #v0.4, add server option, updating r script
-
+#v0.41, versioning
 
 my $usage="
 
@@ -163,6 +163,11 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
 
 #sbptools
 my $descript="$sbptoolsfolder/rnaseq-de/de_test_caller.R";
@@ -453,6 +458,7 @@ else {
 }
 
 
+
 #----------------
 #check input folder
 
@@ -692,5 +698,12 @@ sub find_program {
 
 
 
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}
 
 

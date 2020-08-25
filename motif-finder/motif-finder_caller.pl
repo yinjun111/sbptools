@@ -5,34 +5,13 @@ use Cwd qw(abs_path);
 use File::Basename qw(basename);
 use List::Util qw(sum);
 
-#CutAdapt+FASTQC+RSEM+STAR
-
-
-########
-#Prerequisites
-########
-
-#my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
-
-
-#my $homer="/home/jyin/Programs/Homer/bin";
-my $homer="/apps/homer/bin/";
-my $findmotifsgenome=locate_cmd("findMotifsGenome.pl","$homer/findMotifsGenome.pl");
-my $bed2pos=locate_cmd("bed2pos.pl","$homer/bed2pos.pl");
-
-my $bedtools=locate_cmd("bedtools","/apps/bedtools2-2.26.0/bin/bedtools");
-my $intersectbed="$bedtools intersect";
-
-my $intersect_multi_bed="/apps/sbptools/motif-finder/intersect_multi_bed.sh";
-my $motif_intersect_to_txt="/apps/sbptools/motif-finder/motif_intersect_to_txt.pl";
-
 
 ########
 #Interface
 ########
 
 
-my $version="0.21";
+my $version="0.22";
 
 #v0.11, add mouse motifs
 #v0.12, update script directory
@@ -40,7 +19,7 @@ my $version="0.21";
 #v0.14, add locate_cmd
 #v0.2, support background file
 #v0.21, add --annobed option
-
+#v0.22 versioning
 
 my $usage="
 
@@ -67,6 +46,7 @@ Parameters:
 ";
 
 
+
 unless (@ARGV) {
 	print STDERR $usage;
 	exit;
@@ -74,6 +54,7 @@ unless (@ARGV) {
 
 my $params=join(" ",@ARGV);
 #then call different scripts
+
 
 
 
@@ -89,7 +70,7 @@ my $annobed="T";
 my $verbose=1;
 my $pcol=4; #hidden param
 #my $runmode="none";
-
+my $dev=0;
 
 GetOptions(
 	"in|i=s" => \$inputfile,
@@ -97,11 +78,44 @@ GetOptions(
 	"bg|b=s" => \$bgfile,
 	"annobed|a=s" => \$annobed,
 	
+	"dev" => \$dev,	
 	
 	"tx|t=s" => \$tx,	
 	#"runmode|r=s" => \$runmode,		
 	"verbose|v=s" => \$verbose,
 );
+
+
+
+########
+#Prerequisites
+########
+
+#my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
+
+
+#my $homer="/home/jyin/Programs/Homer/bin";
+my $homer="/apps/homer/bin/";
+my $findmotifsgenome=locate_cmd("findMotifsGenome.pl","$homer/findMotifsGenome.pl");
+my $bed2pos=locate_cmd("bed2pos.pl","$homer/bed2pos.pl");
+
+my $bedtools=locate_cmd("bedtools","/apps/bedtools2-2.26.0/bin/bedtools");
+my $intersectbed="$bedtools intersect";
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#Dev version
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+my $intersect_multi_bed="$sbptoolsfolder/motif-finder/intersect_multi_bed.sh";
+my $motif_intersect_to_txt="$sbptoolsfolder/motif-finder/motif_intersect_to_txt.pl";
 
 
 ########

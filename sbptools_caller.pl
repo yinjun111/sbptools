@@ -1,10 +1,10 @@
 #!/usr/bin/perl -w
 use strict;
 use Getopt::Long;
+use File::Basename;
+use Cwd qw(abs_path);
 
-
-
-my $version="0.51";
+my $version="0.52";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
@@ -12,6 +12,8 @@ my $version="0.51";
 #v0.41 rnaseq-var is supported in Firefly
 #v0.5, new procedure to expand rnaseq processing functions
 #v0.51, update rnaseq-var to v2
+#v0.52, start to support different sbptools versions
+
 
 my $usage="
 
@@ -90,6 +92,11 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=abs_path(dirname($0));
+}
+
 
 
 #####
@@ -105,6 +112,7 @@ my $rnaseq_de="$sbptoolsfolder/rnaseq-de/rnaseq-de_caller.pl";
 my $rnaseq_summary="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_caller.pl";
 
 my $rnaseq_var="sh $sbptoolsfolder/rnaseq-var/rnaseq-var_caller.sh";
+my $rnaseq_var_summary="$sbptoolsfolder/rnaseq-var/rnaseq-var_summary.pl";
 my $rnaseq_motif="$sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl";
 my $rnaseq_motif_summary="$sbptoolsfolder/rnaseq-motif-summary/rnaseq-motif-summary.pl";
 
@@ -131,6 +139,7 @@ my %commands2program=(
 	"rnaseq-summary"=>$rnaseq_summary,
 
 	"rnaseq-var"=>$rnaseq_var,
+	"rnaseq-var-summary"=>$rnaseq_var_summary,
 	"rnaseq-motif"=>$rnaseq_motif,
 	"rnaseq-motif-summary"=>$rnaseq_motif_summary,
 	"gsea-gen"=>$gsea_gen,

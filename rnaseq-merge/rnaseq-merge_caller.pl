@@ -2,7 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 
 #CutAdapt+FASTQC+RSEM+STAR
 
@@ -12,13 +12,15 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
 #v0.31, solves screen envinroment problem
 #v0.32, add CPM
 #v0.4, major updates, to add parallel job, and --dev option
+#v0.41, versioning
+
 
 my $usage="
 
@@ -120,6 +122,10 @@ my $sbptoolsfolder="/apps/sbptools/";
 #adding --dev switch for better development process
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
 }
 
 
@@ -674,3 +680,10 @@ sub find_program {
 }
 
 
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}

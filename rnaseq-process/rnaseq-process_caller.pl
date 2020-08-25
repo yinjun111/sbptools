@@ -2,7 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 
 #CutAdapt+FASTQC+RSEM+STAR
 
@@ -12,7 +12,7 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.5";
+my $version="0.51";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -22,6 +22,7 @@ my $version="0.5";
 #v0.4 add find_program, and queuejob, --dev switch, add 30gb requirement
 #v0.41 option to turn off bamcoverage due to long processing time. changed cutadapt logging
 #v0.5 change alignment procedure to be compatible with more programs. bamcoverage changed.
+#v0.51, support different versions
 
 my $usage="
 
@@ -128,11 +129,12 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
 
-my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
-my $rnaseqmergefilter="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_filter.R";
-my $count2cpm="$sbptoolsfolder/rnaseq-merge/count2cpm.R";
 
 
 my $cutadapt=find_program("/apps/python-3.5.2/bin/cutadapt");
@@ -671,6 +673,8 @@ sub build_timestamp {
 sub find_program {
 	my $fullprogram=shift @_;
 	
+	#use defined program as default, otherwise search for this program in PATH
+	
 	my $program;
 	if($fullprogram=~/([^\/]+)$/) {
 		$program=$1;
@@ -693,7 +697,13 @@ sub find_program {
 }
 
 
-
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}
 
 
 

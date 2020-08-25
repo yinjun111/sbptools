@@ -9,6 +9,8 @@ use File::Basename qw(basename);
 ########
 
 #v0.2, add option to submit each exp separately
+#v0.3, combind up & down
+
 
 ########
 #Prerequisites
@@ -22,7 +24,7 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.2";
+my $version="0.3";
 
 
 my $usage="
@@ -82,11 +84,15 @@ my $logfile="metascape-gen_run.log";
 #Process input file
 ######
 
+#combine up&down together
+my $outfile_both=$outfile;
+$outfile_both=~s/(\.\w+)$/_both$1/;
 
-my $outfile_up=$outfile;
-$outfile_up=~s/(\.\w+)$/_up$1/;
-my $outfile_down=$outfile;
-$outfile_down=~s/(\.\w+)$/_down$1/;
+my $outfile_updown=$outfile;
+$outfile_updown=~s/(\.\w+)$/_updown$1/;
+
+#my $outfile_down=$outfile;
+#$outfile_down=~s/(\.\w+)$/_down$1/;
 
 
 my %comp2gene;
@@ -122,7 +128,7 @@ while(<IN>) {
 close IN;
 
 #All DE
-open(OUT,">$outfile") || die "ERROR:Can't write $outfile.$!\n";
+open(OUT,">$outfile_both") || die "ERROR:Can't write $outfile.$!\n";
 print OUT "#Comparison\tDE Genes\n";
 foreach my $comp (@comps) {
 	if(defined $comp2gene{$comp}{"both"}) {
@@ -144,49 +150,31 @@ foreach my $comp (@comps) {
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
 close OUT;
 		
-#Only Up
-open(OUT,">$outfile_up") || die "ERROR:Can't write $outfile_up.$!\n";
+#Up & Down
+open(OUT,">$outfile_updown") || die "ERROR:Can't write $outfile_updown.$!\n";
 print OUT "#Comparison\tDE Genes\n";
 foreach my $comp (@comps) {
+	my $outfile_exp_updown=$outfile;
+	$outfile_exp_updown=~s/(\.\w+)$/_$comp\_updown$1/;
+	
+	open(OUT_EXP,">$outfile_exp_updown") || die $!;
+
 	if(defined $comp2gene{$comp}{"up"}) {
-		print OUT $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
+		print OUT $comp,"-Up\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
 		
 		#output for each exp
-		my $outfile_exp_up=$outfile;
-		$outfile_exp_up=~s/(\.\w+)$/_$comp\_up$1/;
-		
-		open(OUT_EXP,">$outfile_exp_up") || die $!;
-		
-		print OUT_EXP $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
-		print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
-		
-		close OUT_EXP;
-
+		print OUT_EXP $comp,"-Up\t",join(",",sort keys %{$comp2gene{$comp}{"up"}}),"\n";
 	}
-}
-print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
-close OUT;
-
-#Only Down
-open(OUT,">$outfile_down") || die "ERROR:Can't write $outfile_down.$!\n";
-print OUT "#Comparison\tDE Genes\n";
-foreach my $comp (@comps) {
+	
 	if(defined $comp2gene{$comp}{"down"}) {
-		print OUT $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
+		print OUT $comp,"-Down\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
 
 		#output for each exp
-		my $outfile_exp_down=$outfile;
-		$outfile_exp_down=~s/(\.\w+)$/_$comp\_down$1/;
-		
-		open(OUT_EXP,">$outfile_exp_down") || die $!;
-		
-		print OUT_EXP $comp,"\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
-		print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
-		
-		close OUT_EXP;
-		
+		print OUT_EXP $comp,"-Down\t",join(",",sort keys %{$comp2gene{$comp}{"down"}}),"\n";
 	}
+	
+	print OUT_EXP "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
+	close OUT_EXP;
 }
 print OUT "_BACKGROUND\t",join(",",sort keys %allgenes),"\n";
 close OUT;
-

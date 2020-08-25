@@ -3,8 +3,9 @@ use strict;
 use Getopt::Long;
 use Excel::Writer::XLSX;
 
-#Andrew P. Hodges, Ph.D.
-#5 April 2019
+#Andrew P. Hodges, Ph.D., Jun Yin, Ph.D.
+#Copyright, Sanford Burnham Prebys Medical Discovery Institute
+
 #Purpose: generate excel tables from input list of txt files
 ##
 
@@ -48,15 +49,21 @@ my $version="0.3";
 my $usage="
 text2excel
 version: $version\n
+
+Description: Perl script to generate compile xlsx file from individual text files. The script will prevent automatic format changes in Excel for gene names, special texts, and combine different texts in to tabs.\n
+
 Usage: 
 
-    #Combine two text files into one Excel file
-    perl text2excel.pl -i file1.txt,file2.txt -n ShName1,Shname2 -t 1,2 --theme theme1 -o result.xlsx\n
+    #Simple usage
+    perl text2excel.pl -i file1.txt,file2.txt -o result.xlsx
+
+    #Set sheet names, and choose different themes
+    perl text2excel.pl -i file1.txt,file2.txt -n ShName1,Shname2 -t 1,2 --theme theme2 -o result.xlsx\n
 
     #Use wildcards for input files
     perl text2excel.pl -i \"*.txt\" --theme theme2 -o result.xlsx\n
 
-Description: Perl script to generate compile xlsx file from individual text files.\n
+
 Parameters:
 	--in|-i           input file(s) separated by \",\", support wildcards
                            if wildcards are used, --names won't be supported.
@@ -74,7 +81,7 @@ Parameters:
                       theme2, by JY, adding wrap text, filter etc. Now default option. [theme2]
                       theme0, don't change format
 
-	--delim|-d        default is tab-delimited; use '' for other entries
+	--delim|-d        default is tab-delimited; use '' for other entries [\\t]
 	--verbose|-v      Verbose\n	
 ";
 

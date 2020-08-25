@@ -2,7 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 use List::Util qw(sum);
 
 #CutAdapt+FASTQC+RSEM+STAR
@@ -15,7 +15,7 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.51";
+my $version="0.61";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
@@ -23,6 +23,10 @@ my $version="0.51";
 #v0.4, to be consistent with other rnaseq scripts
 #v0.5, add metascape and gsea support
 #v0.51, pass --dev to other programs
+#v0.52, new gsea-gen params
+#v0.6, gsea-gen/summary and rnaseq-motif/summary will be ran by parallel-job 
+#v0.61, versioning
+
 
 my $usage="
 
@@ -41,7 +45,7 @@ Description: Summarize rnaseq-de results and recalculate significance if needed
 
 Parameters:
 
-    --in|-i           Input folder(s)
+    --in|-i           Input rnaseq-de folder(s)
     --output|-o       Output folder
 
     --config|-c       Configuration file match the samples in the rnaseq-merge folder
@@ -59,8 +63,14 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --run_rnaseq-motif  Whether to run sbptools rnaseq-motif, only generate script by default
-                        Only use this tag when you are in Firefly
+    --run_rnaseq-motif  Whether to run sbptools rnaseq-motif, only generate script by default [none]
+                        use \"cluster\" to run in Firefly
+
+    --run_gsea-gen      Whether to run sbptools gsea-gen, run by default [cluster]
+                        use \"none\" to turn off
+
+    --gseadbs           Default dbs to run are [h.all.v7.1,c5.bp.v7.1]
+                        Other popular dbs include c2.cp.kegg.v7.1,c3.tft.v7.1,c5.cc.v7.1,c5.mf.v7.1
 	
 ";
 
@@ -93,7 +103,9 @@ my $fccutoff;
 my $qcutoff;
 my $geneinput;
 my $txinput;
-my $runrnaseqmotif;
+my $gseadbs="h.all.v7.1,c5.bp.v7.1";
+my $runrnaseqmotif="none";
+my $rungseagen="cluster";
 my $verbose=1;
 my $jobs=5;
 my $tx;
@@ -117,7 +129,9 @@ GetOptions(
 	"jobs|j=s" => \$jobs,
 	"verbose|v" => \$verbose,
 	
-	"run_rnaseq-motif"=>\$runrnaseqmotif,
+	"run_rnaseq-motif=s"=>\$runrnaseqmotif,
+	"run_gsea-gen=s"=>\$rungseagen,
+	"gseadbs=s"=>\$gseadbs,
 	
 	"dev" => \$dev,	
 );
@@ -132,13 +146,20 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
 
 my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $text2excel="$sbptoolsfolder/text2excel/text2excel.pl";
 my $metascape_gen="perl $sbptoolsfolder/metascape-gen/metascape-gen_caller.pl";
 my $gsea_gen="perl $sbptoolsfolder/gsea-gen/gsea-gen_caller.pl";
+my $gsea_gen_summary="perl $sbptoolsfolder/gsea-gen-summary/gsea-gen-summary.pl".scalar(add_dev($dev));
 my $rnaseq_motif="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl".scalar(add_dev($dev));
-
+my $rnaseq_motif_summary="perl $sbptoolsfolder/rnaseq-motif-summary/rnaseq-motif-summary.pl";
+my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
 
 ########
 #Code begins
@@ -163,6 +184,7 @@ if(!-e "$outputfolder/forMetascape") {
 	mkdir("$outputfolder/forMetascape");
 }
 
+my $gsea_gen_run="$outputfolder/forGSEA/gsea-gen_cluster_run.sh";
 if(!-e "$outputfolder/forGSEA") {
 	mkdir("$outputfolder/forGSEA");
 }
@@ -173,9 +195,16 @@ if(!-e "$outputfolder/for_rnaseq-motif/") {
 }
 
 
+my $scriptfolder="$outputfolder/scripts";
+
+if(!-e $scriptfolder) {
+	mkdir($scriptfolder);
+}
+
+my $scriptfile1="$scriptfolder/rnaseq-summary_run1.sh";
+my $scriptfile2="$scriptfolder/rnaseq-summary_run2.sh";
+
 my $logfile="$outputfolder/rnaseq-summary_run.log";
-
-
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -256,6 +285,7 @@ print LOG "\nsbptools rnaseq-summary $version running ...\n\n";
 my %folder2genede;
 my %folder2txde;
 my %folder2dir;
+my %comparisons;
 
 foreach my $inputfolder (split(",",$inputfolders)) {
 	#print STDERR $inputfolder,"#1\n";
@@ -273,6 +303,8 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 					print LOG "ERROR:$foldername has been used twice:\n",abs_path($folder),"\n",$folder2dir{$foldername},"\n\n";
 					exit;
 				}
+
+				$comparisons{$foldername}++;
 				
 				$folder2dir{$foldername}=abs_path($folder);
 				my @files=map {basename($_)} glob("$folder/*");
@@ -571,8 +603,6 @@ print STDERR "Calculating group average for gene.\n" if $verbose;
 print LOG "Calculating group average for gene.\n";
 
 
-
-
 #read FPKM/TPM,cal group
 foreach my $file ("gene.results.merged.fpkm.txt","gene.results.merged.tpm.txt") {
 
@@ -642,47 +672,129 @@ system("$mergefiles -m $outputfolder/genes_sel.txt -i ".$tx2ref{$tx}{"geneanno"}
 #####
 
 #IPA
+#-----------
 print STDERR "Files ready for IPA analysis are in: $outputfolder/forIPA\n" if $verbose;
 print LOG "Files ready for IPA analysis are in: $outputfolder/forIPA\n";
 
 #Metascape
-
+#-----------
 print STDERR "Generate files for Metascape analysis.\n" if $verbose;
 print LOG "Generate files for Metascape analysis.\n";
+print LOG "$metascape_gen -i $outputfolder/rnaseq-summary_GeneDESigs.txt -o $outputfolder/forMetascape/$outputfoldername\_forMetascape.txt\n";
+
 system("$metascape_gen -i $outputfolder/rnaseq-summary_GeneDESigs.txt -o $outputfolder/forMetascape/$outputfoldername\_forMetascape.txt");
 
 print STDERR "Files ready for Metascape analysis are in: $outputfolder/forMetascape/\n" if $verbose;
 print LOG "Files ready for Metascape analysis are in: $outputfolder/forMetascape/\n";
 
 #GSEA
-
+#-----------
 print STDERR "Generate files for GSEA analysis.\n" if $verbose;
 print LOG "Generate files for GSEA analysis.\n";
-system("$gsea_gen -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group -g $outputfolder/forGSEA/$outputfoldername.gct -c $outputfolder/forGSEA/$outputfoldername.cls");
+
+my $gsearunnum=0;
+my @gseascripts;
+
+#Only two tests are performed due to size of the GSEA results
+#,c2.cp.kegg.v7.1,c3.tft.v7.1,c5.cc.v7.1,c5.mf.v7.1
+
+
+#open(OUT,">$gsea_gen_run") || die "ERROR:Can't write into $gsea_gen_run.$!\n\n";
+
+foreach my $comparison (sort keys %comparisons) {
+	if($comparison=~/(.+)_vs_(.+)/) {
+		print STDERR "Comparison:$comparison recognized. Perform GSEA analysis.\n";
+		print LOG "Comparison:$comparison recognized. Perform GSEA analysis.\n";
+		
+		
+		foreach my $gseadb (split(",",$gseadbs)) {
+			my $gseacmd="$gsea_gen --tx $tx -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group -o $outputfolder/forGSEA/$comparison\-$gseadb -d $gseadb -c $1\_versus_$2";
+			
+			#print OUT "$gseacmd -r cluster\n";		
+		
+			
+			#just generate script and run later with gsea-summary
+			#if($rungseagen eq "cluster") {
+			#	system("$gseacmd -r cluster");
+			#	print LOG "$gseacmd -r cluster\n";
+			#}
+			#else {
+				system("$gseacmd -r none");
+				print LOG "$gseacmd -r none\n";
+			#}
+			
+			push @gseascripts,"$outputfolder/forGSEA/$comparison\-$gseadb/gsea-gen_run.sh";
+			
+			$gsearunnum++;
+		}
+	}
+}
+#close OUT;
+
+if($gsearunnum==0) {
+	#failed to recognize any comparison, then just generate cls and gct
+	system("$gsea_gen --tx $tx -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group -o $outputfolder/forGSEA/GSEARaw/ -r none");
+	print LOG "$gsea_gen --tx $tx -e $outputfolder/gene.results.merged.tpm.sel.txt -s ".abs_path($configfile)." -n $group -o $outputfolder/forGSEA/GSEARaw/ -r none\n";
+}
+
+#merge all GSEA scripts together
+system("cat ".join(" ",@gseascripts)." > $outputfolder/forGSEA/run_gsea_1.sh");
+
+#script for gsea-gen-summary and zip the folder
+open(OUT,">$outputfolder/forGSEA/run_gsea_2.sh") || die $!;
+print OUT "$gsea_gen_summary -i $outputfolder/forGSEA/ -o $outputfolder/forGSEA/GSEASummary;cd $outputfolder/;zip -r GSEA.zip forGSEA/\n";
+close OUT;
+
+my $gseaclustercommand="$parallel_job -i $outputfolder/forGSEA/run_gsea_1.sh,$outputfolder/forGSEA/run_gsea_2.sh -o $outputfolder/forGSEA/ -n run_gsea_1,run_gsea_2 --tandem -r";
+
+print STDERR "$gseaclustercommand\n";
+print LOG "$gseaclustercommand\n";
+	
+if($rungseagen eq "cluster" && $gsearunnum>0) {
+	system($gseaclustercommand);
+}
 
 print STDERR "Files ready for GSEA analysis are in: $outputfolder/forGSEA/\n" if $verbose;
 print LOG "Files ready for GSEA analysis are in: $outputfolder/forGSEA/\n";
 
 #rnaseq-motif
+#-----------
 print STDERR "Generate files for rnaseq-motif analysis.\n" if $verbose;
 print LOG "Generate files for rnaseq-motif analysis.\n";
 
 
 foreach my $folder (sort keys %folder2genede) {
 	#use new de file
-	my $runaseqmotifcmd="$rnaseq_motif --ge $outputfolder/$folder\_GeneDEreformated.txt --promoter longesttx -o $outputfolder/for_rnaseq-motif/$folder --tx $tx -v";
+	my $rnaseqmotifcmd="$rnaseq_motif --ge $outputfolder/$folder\_GeneDEreformated.txt --promoter longesttx -o $outputfolder/for_rnaseq-motif/$folder --tx $tx -v";
 
-	if($runrnaseqmotif) {
-		system($runaseqmotifcmd." -r cluster");
-		print LOG $runaseqmotifcmd." -r cluster\n";
-	}
-	else {
-		system($runaseqmotifcmd);
-		print LOG $runaseqmotifcmd,"\n";
-	}
+	#if($runrnaseqmotif eq "cluster") {
+	#	system($rnaseqmotifcmd." -r cluster");
+	#	print LOG $rnaseqmotifcmd." -r cluster\n";
+	#}
+	#else {
+		system($rnaseqmotifcmd);
+		print LOG $rnaseqmotifcmd,"\n";
+	#}
 }
 
-system("cat $outputfolder/for_rnaseq-motif/*/scripts/*.sh > $outputfolder/for_rnaseq-motif/run_rnaseq-motif.sh");
+#merge all running scripts
+system("cat $outputfolder/for_rnaseq-motif/*/scripts/*.sh > $outputfolder/for_rnaseq-motif/run_rnaseq-motif_1.sh");
+
+#script for rnaseq-motif-summary
+open(OUT,">$outputfolder/for_rnaseq-motif/run_rnaseq-motif_2.sh") || die $!;
+print OUT "$rnaseq_motif_summary -i $outputfolder/for_rnaseq-motif/ -o $outputfolder/for_rnaseq-motif/RNASeqMotifSummary\n";
+close OUT;
+
+#use parallel-job to run the jobs in tandem
+my $rnaseqmotifcommand="$parallel_job -i $outputfolder/for_rnaseq-motif/run_rnaseq-motif_1.sh,$outputfolder/for_rnaseq-motif/run_rnaseq-motif_2.sh -o $outputfolder/for_rnaseq-motif/ -n run_rnaseq-motif_1,run_rnaseq-motif_2 --tandem -r";
+
+print STDERR "$rnaseqmotifcommand\n";
+print LOG "$rnaseqmotifcommand\n";
+
+
+if($runrnaseqmotif eq "cluster" && $gsearunnum>0) {
+	system($gseaclustercommand);
+}
 
 print STDERR "Files ready for rnaseq-motif analysis are in: $outputfolder/for_rnaseq-motif/\n" if $verbose;
 print LOG "Files ready for rnaseq-motif analysis are in: $outputfolder/for_rnaseq-motif/\n";
@@ -811,3 +923,10 @@ sub add_dev {
 }
 
 
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}

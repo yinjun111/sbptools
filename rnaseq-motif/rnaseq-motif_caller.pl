@@ -2,7 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 use List::Util qw(sum);
 
 #CutAdapt+FASTQC+RSEM+STAR
@@ -14,13 +14,13 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #v0.2, add system run
 #v0.21, add locate_cmd
 #V0.3, add --dev
 #v0.4, add background for motif finder
-
+#v0.41, versioning
 
 my $usage="
 
@@ -128,6 +128,11 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
 
 my $motiffinder="perl $sbptoolsfolder/motif-finder/motif-finder_caller.pl"; #improve compatibility
 my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
@@ -596,3 +601,11 @@ sub build_timestamp {
 }
 
 
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}

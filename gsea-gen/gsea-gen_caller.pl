@@ -1,20 +1,21 @@
 #!/usr/bin/perl
+use strict;
+use Cwd qw(abs_path);
+use Getopt::Long;
+use List::MoreUtils qw(uniq);
+use File::Basename qw(basename dirname);
+
+
 #Andrew Hodges, PhD
 #BI Shared Resource, SBP
 #11/6/2019
-#Update: 4/30/2020
+#Update: 4/22/2020
 #(C)2019-2020, SBP
-
-#Purpose: generate gct and cls format files for sbptools expression data
-#Input format based on sbptools outputs
-#
-
-#!/usr/bin/perl -w
-#use strict;
-#use warnings;
-use Getopt::Long;
-use List::MoreUtils qw(uniq);
-#use String::Util qw(trim);
+#Jun Yin, PhD
+#BI Shared Resource, SBP
+#7/20/2020
+#Update: 4/22/2020
+#(C)2019-2020, SBP
 
 
 ########
@@ -26,31 +27,59 @@ use List::MoreUtils qw(uniq);
 #Interface
 ########
 
-########
-#Update: removing rows with unmatched gene anno; updating cls file counts
-########
 
+my $version="1.1";
 
-my $version="0.5.4";
-
+#v1.0a, perform GSEA analysis after cls and gct are generated.
+#v1.1 versioning
 
 my $usage="
 gseagen
 version: $version\n
-Usage:  perl gsea-gen_caller.pl -e ./data/gene.results.merged.tpm.txt -ga ./data/geneanno.txt -g example.gct -s ./data/configV1.txt -n Group -c example.gct \n
+Usage:  sbptools gsea-gen -e ./data/gene.results.merged.tpm.txt -o resultsfolder -s ./data/configV1.txt -n Group -t Human.B38.Ensembl84 -d h.all.v7.1\n
 
-Description: Perl script to generate gct and cls files for GSEA analysis.\n
+Description: Perl script to generate gct and cls files for GSEA analysis based on gene expression matrix
+The script needs --comparisons to run GSEA. If no --comparisons is provided, it will just generate .gct and .cls files.
+
+
 Parameters:
-	--expression|-e      input file of merged expression data
-	--sampleAnno|-s      sample annotation 
-	--geneAnno|-ga       gene annotation (optional)
-	--gctName|-g         output gct file name
-	--clsName|-c         output cls file name
-	--groupName|-n       name of group column for CLS generation
-        --removeUnmatched|-u remove unmatched genes: 1 for remove rows (default/hardcoded)
 
-#--verbose|-v     Verbose\n
+	--expression|-e   Input file of merged expression data
+	--out|-o          Output folder
+	
+	--sampleAnno|-s   Sample annotation 
+	--groupName|-n    Name of group column for CLS generation
+
+	--tx|-t           Transcriptome
+                        Currently support Human.B38.Ensembl84, Mouse.B38.Ensembl84
+	--chip            Use MSigDB chip file, e.g. Human_ENSEMBL_Gene_MSigDB.7.1 (optional)
+	--geneAnno|-ga    Gene annotation (optional)
+
+	--comparisons|-c  Comparisons, one pair comparison is recommended(optional)
+
+	--db|-d           MSigDB database to be used
+                       Recommended:
+                        h.all.v7.1
+                        c5.bp.v7.1
+						
+                       Others include: 
+                       c1.all.v7.1,c2.all.v7.1,c2.cgp.v7.1,c2.cp.biocarta.v7.1,c2.cp.kegg.v7.1,c2.cp.pid.v7.1,c2.cp.reactome.v7.1,c2.cp.v7.1,c3.all.v7.1,c3.mir.mirdb.v7.1,c3.mir.mir_legacy.v7.1,c3.mir.v7.1,c3.tft.gtrd.v7.1,c3.tft.tft_legacy.v7.1,c3.tft.v7.1,c4.all.v7.1,c4.cgn.v7.1,c4.cm.v7.1,c5.all.v7.1,c5.bp.v7.1,c5.cc.v7.1,c5.mf.v7.1,c6.all.v7.1,c7.all.v7.1,h.all.v7.1
+
+    --runmode|-r      Where to run the scripts, local, system, server or none [none]
+                                  none, only prints scripts
+                                  local, run the scripts using parallel in local workstation(Falco)	
+                                  system, run the scripts without paralleling (Falco)
+                                  server, run the scripts in cluster (Firefly)
+
+    --verbose|-v      Verbose
+
 ";
+
+#	--gctfile|-g      output gct file name
+#	--clsfile|-c      output cls file name
+
+
+
 
 
 unless (@ARGV) {
@@ -67,52 +96,122 @@ my $params=join(" ",@ARGV);
 my $expression;
 my $sampleAnno;
 my $geneAnno = "";
-my $gctName;
-my $clsName; ##="F";
+my $outputfolder;
+my $tx;
+my $chipfile;
+my $db;
+
+my $comparisons;
 my $sampleName="Sample";
 #my $dirExprF;
 #my $dirSanno; # = "";
 #my $dirGanno;
-#my $verbose;
+my $verbose=0;
 my $groupName;
-my $unmatched = 1;  #by default we will remove unmatched anno if 
 
+my $jobs=5;
+my $runmode="none";
+
+my $dev=0;
 
 ####re-add here
 GetOptions(	
     "expression|e=s" => \$expression,
+	"out|o=s" => \$outputfolder,
     "sampleAnno|s=s" => \$sampleAnno,
     "geneAnno|ga=s" => \$geneAnno,
-    "gctName|g=s" => \$gctName,
-    "clsName|c=s" => \$clsName,
     "groupName|n=s" => \$groupName,
-    "sampleName|r=s" => \$sampleName, #sample column ID used in config file
-    #"removeUnmatched|u=s" => \$unmatched,	  
-#    "verbose|v" => \$verbose,
+	"tx|t=s" => \$tx,
+	"chip=s" => \$chipfile,	
+	"comparisons|c=s" => \$comparisons,
+	"db|d=s" => \$db,
+    "sampleName|r=s" => \$sampleName, #sample column ID used in config file	  
+	"dev" => \$dev,	
+	"runmode|r=s" => \$runmode,	
+    "verbose|v" => \$verbose,
 );
 
 
-#####MAIN functions:
-##create a log file based on gct name: updated 4/20/2020
-my $tmp = $gctName;
-$tmp =~ s/\.gct/_gsea-gen_run.log/;
-open LOG, ">".$tmp or die "Error: Unable to open logfile $tmp $! \n";
-print LOG "GSEA-Gen Log file: \n";
+#    "gctfile|g=s" => \$gctfile,
+#    "clsfile|c=s" => \$clsfile,
+
+########
+#Prerequisites
+########
+
+#my $sbptools=locate_cmd("sbptools","/usr/bin/sbptools");
+#my $motiffinder="$sbptools motif-finder"; #improve compatibility
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#Dev version
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+
+my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
+my $gsea_cli="/apps/GSEA_Linux_4.0.3/gsea-cli.sh GSEA";
+
+
+
+
+########
+#Program begins
+########
+
+#Create folders
+
+if(!-e $outputfolder) {
+	mkdir($outputfolder);
+}
+
+$outputfolder = abs_path($outputfolder);
+
+my $outputfoldername=basename($outputfolder);
+
+
+my $logfile="$outputfolder/gsea-gen_run.log";
+
+my $gctfile="$outputfolder/$outputfoldername.gct";
+my $clsfile="$outputfolder/$outputfoldername.cls";
+
+my $scriptfile1="$outputfolder/gsea-gen_run.sh";
+my $scriptlocalrun="$outputfolder/gsea-gen_local_submission.sh";
+my $scriptclusterrun="$outputfolder/gsea-gen_cluster_submission.sh";
+
+
+#write log file
+open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
+
+print LOG "gsea-gen log file: \n";
 my $now = localtime();
+my $timestamp=build_timestamp($now,"long");
+
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
-print STDERR "Start time: $now\n\n";
+print STDERR "Start time: $now\n\n" if $verbose;
 print LOG "Curent version: $version\n\n";
 print LOG "\n";
 
 
+
+#####
 #next get annotation
+#####
+
+print STDERR "gsea-gen version $version running.\n\n";
+print LOG "gsea-gen version $version running.\n\n";
+
 my %anno;
 my $aflag = 0; #aflag is whether or not to use the gene annotation file to label rows
 print LOG "Annotation: ";
-print STDERR "Annotation: ";
-if($geneAnno ne ""){ %anno = getAnno( $geneAnno); $aflag=1; print LOG "$geneAnno";}
-else{ print LOG "No gene annotation file selected.";}
+print STDERR "Annotation: " if $verbose;
+if($geneAnno ne ""){ %anno = getAnno( $geneAnno); $aflag=1; print LOG "$geneAnno";}else{ print LOG "No gene annotation file selected.";}
 print LOG "\n";
 my $rowcount;
 my $colcount;
@@ -121,32 +220,37 @@ my $colcount;
 #$rowcount = 47643;
 my $expr = "wc -l $expression";
 $rowcount = `$expr` - 1;
-print LOG "Number of starting rows: ".$rowcount."\n";
-print STDERR "Number of starting rows: ".$rowcount."\n";
+print LOG "Number of rows: ".$rowcount."\n";
+print STDERR "Number of rows: ".$rowcount."\n" if $verbose;
 
 #$colcount = 20;
 my $expr2 = "head -n2 $expression | tail -n1 | wc -w";
 $colcount = `$expr2` - 1; #assume 1 gene info columns
 print LOG "Number of columns: ".$colcount."\n";
-print STDERR "Number of columns: ".$colcount."\n";
+print STDERR "Number of columns: ".$colcount."\n" if $verbose;
+
+
+
+
+######
+#create gct file
+######
 
 #Next open main filehandles for data and output gct file
-open fout, ">".$gctName or die "Error: Can't write $gctName $! \n";
+open fout, ">".$gctfile or die "Error: Can't write $gctfile $! \n";
 print LOG "\nOpened GCT file for writing.\n";
-print STDERR "\nOpened GCT file for writing.\n";
+print STDERR "\nOpened GCT file for writing.\n" if $verbose;
 
 open expr, $expression or die "Error: Can't read $expression $! \n";
-#printf fout "#1.2\n".$rowcount."\t".$colcount."\n";
+printf fout "#1.2\n".$rowcount."\t".$colcount."\n";
 print LOG "Opened expression file for reading.\n";
-print STDERR "Opened expression file for reading.\n";
-my $tempgct = "";
+print STDERR "Opened expression file for reading.\n" if $verbose;
+
 
 my @sampleOrders;
 
 
 ####this can be added into a subroutine later
-my $rowcount2 = 0;  ###counter for rows that arent removed during optional gene anno match
-my $rowcount1 = 0;
 my $y = -1;
 while(<expr>){
 	$y++; 
@@ -160,84 +264,200 @@ while(<expr>){
 			@sampleOrders = @tempr;
 			shift(@sampleOrders);
 			shift(@sampleOrders);
-			$tempgct .= $string."\n";
+			printf fout $string."\n";
 		}
 		else{ ###data non-blank rows
 			###first get the gene using annotation hash
 			my @vals = split(/\t/,$string);
 			my $gene2 = $vals[0];
-			$gene2 =~ s/^[\s]+//;
-			$gene2 =~ s/[\s]+$//;
 			my $gene = ""; 
-			if($aflag){ #use gene anno
-			    			    
-			    ####Update 4/24: only write if entry exists
-			    if(exists $anno{ $gene2 }){
-				#if($anno{ $gene2 } ne ""){
-				$gene = $anno{ $gene2 };
-				$rowcount2++;
-				$tempgct .= $gene."\t".$string."\n";			    
-			    }
-			    else{next;}			    
-			}
-			else{ ###don't use gene anno
-			    $gene = $gene2;
-			    $rowcount1++;
-			    $tempgct .= $gene."\t".$string."\n";
-			}
-			
+			if($aflag){$gene = $anno{ $gene2 };}
+			else{$gene = $gene2;}
+			#print $gene."\n";
+			###update string
+			###write to file
+			printf fout $gene."\t".$string."\n";
 		}
 	}
 }
-
-#print "\n\n:::::::::TEST: rowcount $rowcount1 ::::::\n\n";
-my $rowcountx = 0;
-#print " Test rowcount is $rowcount2 or $rowcount \n";
-if($unmatched){ $rowcountx = $rowcount2; } else { $rowcountx = $rowcount; }
-if(!$aflag){ $rowcountx = $rowcount1; } #original counts while scanning ensid
-print fout "#1.2\n" . $rowcountx ."\t" . $colcount."\n";
-print LOG "__GCT final counts: $rowcountx rows, $colcount columns.\n";
-print STDERR "__GCT final counts: $rowcountx rows, $colcount columns.\n";
-#print "__:".$rowcountx."\t".$colcount."\n\n";
-print fout $tempgct;
-
 close expr;
 print LOG "__Finished reading expression file.\n\n";
-print STDERR "__Finished reading expression file.\n\n";
+print STDERR "__Finished reading expression file.\n\n" if $verbose;
 
 close fout;
 print LOG "Finished generating gct file!\n";
-print STDERR "Finished generating gct file!\n";
+print STDERR "Finished generating gct file!\n" if $verbose;
 
 print LOG "Sample orderings: ".join(" ",@sampleOrders)."\n";
-print STDERR "Sample orderings: ".join(" ",@sampleOrders)."\n";
+print STDERR "Sample orderings: ".join(" ",@sampleOrders)."\n" if $verbose;
 
 
-#######Step 2: create CLS file
+######
+#create CLS file
+######
+
 ###note that current version is for categorical CLS and NOT continuous (time series/geneprofile)
 print LOG "\nAssembling CLS header, groupings, and orderingso.\n";
-print STDERR "\nAssembling CLS header, groupings, and orderings.\n";
+print STDERR "\nAssembling CLS header, groupings, and orderings.\n" if $verbose;
 
 my @cats = getUniqCats($sampleAnno, $groupName);
 print LOG "__Categories generated: ".join(", ",@cats)."\n";
-print STDERR "__Categories generated: ".join(", ",@cats)."\n";
+print STDERR "__Categories generated: ".join(", ",@cats)."\n" if $verbose;
+
+my %cats_hash=map {$_,1} @cats;
 
 my $clsheader = $colcount ." ". scalar @cats ." 1\n";
 $clsheader .= "#".join(" ",@cats)."\n";
 my $writestring = getCats($sampleAnno, $groupName, $sampleName, \@sampleOrders);
 #print $clsheader.$writestring."\n";
 
-open outcls, ">".$clsName or die "Error: Can't read $clsName $! \n";
+open outcls, ">".$clsfile or die "Error: Can't read $clsfile $! \n";
 printf outcls $clsheader.$writestring."\n";
 close outcls;
 
 print LOG "\nFinished generating cls file!\n\n";
-print STDERR "\nFinished generating cls file!\n\n";
-$now = localtime();
-print LOG "Completion time: $now \n";
-print STDERR "\nCompletion time: $now \n";
+print STDERR "\nFinished generating cls file!\n\n" if $verbose;
+
+
+######
+#Read comparisons
+######
+
+my %comparisons_all;
+my %comp_groups;
+
+if(defined $comparisons && length($comparisons)>0) {
+	foreach my $comp (split(",",$comparisons)) {
+		if($comp=~/(.+)_versus_(.+)/) {
+			if(!defined $cats_hash{$1}) {
+				print STDERR "ERROR:Group $1 not defined.\n\n";
+				print LOG "ERROR:Group $1 not defined.\n\n";
+				exit;
+			}
+			if(!defined $cats_hash{$2}) {
+				print STDERR "ERROR:Group $1 not defined.\n\n";
+				print LOG "ERROR:Group $1 not defined.\n\n";
+				exit;
+			}
+		}
+		else {
+			print STDERR "ERROR:Comparison $comp is not in the right format. Please use group1_versus_group2 for comparison name.\n\n";
+			print LOG "ERROR:Comparison $comp is not in the right format. Please use group1_versus_group2 for comparison name.\n\n";
+		}
+		$comparisons_all{$comp}++;
+	}
+
+	print STDERR scalar(keys %comparisons_all), " comparison(s) are needed:\n";
+	print STDERR join("\n",sort keys %comparisons_all),"\n";
+
+	print LOG scalar(keys %comparisons_all), " comparison(s) are needed:\n";
+	print LOG join("\n",sort keys %comparisons_all),"\n";
+}
+else {
+
+	print STDERR "No comparisons are defined. Skip GSEA run. Only .gct and .cls files are generated.\n";
+	print LOG "No comparisons are defined. Skip GSEA run. Only .gct and .cls files are generated.\n";
+	
+	exit; #exit here before generating GSEA scripts
+}
+
+
+######
+#Run GSEA
+######
+
+#MSigdb, gmt annotation files 
+my $db2file="/data/jyin/Databases/GSEA/msigdb_v7.1_files_to_download_locally/msigdb_v7.1_GMTs/"."$db.symbols.gmt";
+
+if(!-e $db2file) {
+	print STDERR "ERROR:--db $db not supported. $db2file was not found.\n\n";
+	exit;
+}
+
+#chip, gene annotation
+my $chipfile;
+if($tx eq "Human.B38.Ensembl84") {
+	$chipfile="/data/jyin/Databases/GSEA/msigdb_v7.1_chip_files_to_download_locally/Human_ENSEMBL_Gene_MSigDB.7.1.chip";
+}
+elsif ($tx eq "Mouse.B38.Ensembl84") {
+	$chipfile="/data/jyin/Databases/GSEA/msigdb_v7.1_chip_files_to_download_locally/Mouse_ENSEMBL_Gene_ID_to_Human_Orthologs_MSigDB.7.1.chip";
+}
+else {
+	print STDERR "ERROR: --tx $tx not recognized.\n\n";
+	exit;
+}
+
+if(defined $comparisons && length($comparisons)>0) {
+	
+	open(OUT,">$scriptfile1") || die $!;
+	foreach my $comparison (sort keys %comparisons_all) {
+		print OUT "$gsea_cli -res $gctfile -cls $clsfile#$comparison -gmx $db2file -chip $chipfile -out $outputfolder -collapse Collapse -mode Max_probe -norm meandiv -nperm 1000 -permute phenotype -rnd_type no_balance -scoring_scheme weighted -rpt_label my_analysis -metric Signal2Noise -sort real -order descending  -create_gcts false -create_svgs false -include_only_symbols true -make_sets true -median false -num 100 -plot_top_x 30 -rnd_seed timestamp -save_rnd_lists false -set_max 500 -set_min 10 -zip_report false\n";
+	}
+	close OUT;
+
+}
+
+
+
+#$now = localtime();
+#print LOG "Completion time: $now \n";
+#print STDERR "\nCompletion time: $now \n";
+
+#close LOG;
+
+
+
+#######
+#Run mode
+#######
+
+my $jobnumber=0;
+my $jobname="gsea-gen-$timestamp";
+
+if($jobs eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$jobs;
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
+	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	
+	print STDERR "\nTo run in cluster, in shell type:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
+	print LOG "\nTo run in cluster, in shell type:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	
+	#need to replace with "sbptools queuejob" later
+
+	system($localcommand);
+	print LOG "$localcommand;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
+}
+if($runmode eq "system") {
+	print STDERR "\nRunning locally without parallel. sh $scriptfile1.\n\n";
+	print LOG "\nRunning locally without parallel. sh $scriptfile1.\n\n";
+	
+	system("sh $scriptfile1");
+}
+elsif($runmode eq "cluster") {
+	#cluster mode	
+	print STDERR "\nStart running in cluster using:$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r\n\n";
+	system("$parallel_job -i $scriptfile1 -o $outputfolder/scripts/ -r");
+}
+
 
 close LOG;
+
 
 
 ###
@@ -257,7 +477,7 @@ sub getCats {
 	my %mapper;
 	open fconfig2, $fname or die "Error: Can't read $fname $! \n";
 	
-	$z = -1;
+	my $z = -1;
 	my %temphash;
 
 	###Read through configuration file to get mappings
@@ -273,8 +493,8 @@ sub getCats {
 
 			if($z == 0){     		
 				#print "VS: ".join(",",@vs)."\n";
-				$k=-1;
-				foreach $val (values @vs){
+				my $k=-1;
+				foreach my $val (values @vs){
 					$k++;					
 					#print "_next: $k \n";
 					my $mp =""; $mp = $vs[$k];
@@ -307,9 +527,10 @@ sub getCats {
 		push(@temp, $mapper{$string});
 	}
 	$outstring = join("\t",@temp)."\n";
+
+
 	close fconfig2;
-	#chomp($outstring);
-	$outstring =~ s/^[\s\t]+//;
+	chomp($outstring);
 	return( $outstring );
 }
 
@@ -323,9 +544,10 @@ sub getUniqCats {
 	#print $fname."\n";
 	open fconfig, $fname or die "ERROR: Can't read $fname $!";
 	
-	$z = -1;
+	my $z = -1;
 	my %temphash;
-        my @tempcatarr;
+    my @tempcatarr;
+	
 	my $tempkey = -1;
 	while(<fconfig>){
 		$z++;
@@ -347,7 +569,7 @@ sub getUniqCats {
 	}
 	close fconfig;
 	###new: get list based on original ordering of appearance: modified from O'reilly
-	%seen = ();
+	my %seen = ();
 	my @uniqx = grep{ ! $seen{$_} ++ } @tempcatarr;
 
 	return(@uniqx);
@@ -358,13 +580,12 @@ sub getUniqCats {
 
 sub getAnno {
 	my ($anno) = @_;
-	$annofile = $anno; #[0];
+	my $annofile = $anno; #[0];
 	open in, $annofile or die $!;
-	$x = 0;
-	my %genehash={};
+	my $x = 0;
+	my %genehash;
 	while(<in>){
-	    $x++; 
-	    #if($x > 20){last;} ###test of missing values via restricting anno genes
+		$x++;
 		if($x>1){ #ignore header row
 			#trim(
 			chomp(my $string = $_);
@@ -373,14 +594,37 @@ sub getAnno {
 			if($string ne ""){
 				my @vals = split(/\t/,$string);
 				my $v1 = ""; my $v2 = "";
-				$v1 = $vals[0]; chomp($v2 = $vals[1]);
-				$v2 =~ s/\s+//g;
+				$v1 = $vals[0]; $v2 = $vals[1];
 				###trivial case of non-identified ensids reassigned 
 				###   (e.g. no gene name)
-				if($v2 eq ""){ } #update: don't add unmatched to hash  ####$v2 = $v1; }
-				else{ $genehash{$v1} = $v2; }
+				if($v2 eq ""){ $v2 = $v1; }
+				$genehash{$v1} = $v2;
 			}
 		}	
 	}
 	return %genehash;
 }
+
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
+}
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}
+
