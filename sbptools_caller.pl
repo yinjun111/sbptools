@@ -93,11 +93,7 @@ if($dev) {
 }
 else {
 	#the tools called will be within the same folder of the script
-	my $currentpath=abs_path(dirname($0));
-	
-	unless($currentpath eq "/usr/bin") {
-		$sbptoolsfolder=$currentpath;
-	}
+	$sbptoolsfolder=dirname(abs_path($0));
 }
 
 
