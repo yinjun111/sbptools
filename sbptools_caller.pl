@@ -14,7 +14,6 @@ my $version="0.52";
 #v0.51, update rnaseq-var to v2
 #v0.52, start to support different sbptools versions
 
-
 my $usage="
 
 sbptools
@@ -94,7 +93,11 @@ if($dev) {
 }
 else {
 	#the tools called will be within the same folder of the script
-	$sbptoolsfolder=abs_path(dirname($0));
+	my $currentpath=abs_path(dirname($0));
+	
+	unless($currentpath eq "/usr/bin") {
+		$sbptoolsfolder=$currentpath;
+	}
 }
 
 
