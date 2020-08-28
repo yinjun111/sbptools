@@ -11,13 +11,15 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.41";
+my $version="0.6";
 
 #version 0.2a, add r version log
 #v0.3 add runmode
 #v0.31, solves screen envinroment problem
 #v0.4, add server option, updating r script
-#v0.41, versioning
+#v0.5, use R 4.0.2, add comparison argument for multiple comparisons
+#v0.51, versioning
+#v0.6, major updates planned for R4.0, comparisons of multiple groups. turn off txde
 
 my $usage="
 
@@ -30,17 +32,28 @@ Description: Differential Expression (DE) tests using DESeq2. This script works 
 
 Mandatory Parameters:
     --in|-i           Input folder from rnaseq-merge
+
     --output|-o       Output folder
+                         Changes since v0.5. If your output folder in -o DE/,
+                         the comparison results will be save in DE/treatment_vs_reference folder
+
     --config|-c       Configuration file match the samples in the rnaseq-merge folder
                            first column as sample name.
 
+    --tx|-t           Transcriptome
+                        Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
+
     --formula|-f      Formula for GLM, e.g. ~Group.
                           the last factor of the formula is used for comparison
+
+    #if you have multiple comparisons to perform in a project
+    --comparisons     Tab delimited file with first column as treatment groups
+                        and second column as reference groups for multiple pairwise comparisons
+
+    #if you only have one comparison
     --treatment       Treatment group name
     --reference       Reference group name
 
-    --tx|-t           Transcriptome
-                        Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 						
 Optional Parameters:
     --pmethod         DESeq2 method, default as Wald test [Wald]
@@ -57,6 +70,8 @@ Optional Parameters:
     --fccutoff        Log2 FC cutoff [1]
     --qcutoff         Corrected P cutoff [0.05]
 
+    --txde            Run DE tests for Tx [F]
+
     --runmode|-r      Where to run the scripts, local, cluster or none [none]
 
 	#Parallel computing controls	
@@ -69,6 +84,8 @@ Optional Parameters:
 
 #    --verbose|-v      Verbose
 
+#add --comparison argument to read comparisons.txt for pairwise comparisons...
+#may need to turn off -o, and use comparison name as output folder name to be compatible with gsea-gen
 
 
 #R parameters
@@ -106,6 +123,7 @@ my $configfile;
 my $outputfolder;
 
 my $formula;
+my $comparisons;
 my $treatment;
 my $reference;
 
@@ -114,6 +132,7 @@ my $qmethod="BH";
 my $useallsamples="F";
 my $filter="auto";
 
+my $txde="F";
 my $fccutoff=1;
 my $qcutoff=0.05;
 
@@ -134,6 +153,7 @@ GetOptions(
 	"out|o=s" => \$outputfolder,
 	"formula|f=s" => \$formula,
 	
+	"comparisons=s" => \$comparisons,
 	"treatment=s" => \$treatment,
 	"reference=s" => \$reference,
 	
@@ -144,6 +164,8 @@ GetOptions(
 	
 	"fccutoff=s" => \$fccutoff,
 	"qcutoff=s" => \$qcutoff,
+	
+	"txde=s" => \$txde,
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
@@ -165,7 +187,7 @@ if($dev) {
 }
 else {
 	#the tools called will be within the same folder of the script
-	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+	$sbptoolsfolder=get_parent_folder(dirname(abs_path($0)));
 }
 
 
@@ -175,8 +197,11 @@ my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 
 
-my $r=find_program("/apps/R-3.4.1/bin/R");
-my $rscript=find_program("/apps/R-3.4.1/bin/Rscript");
+my $r=find_program("/apps/R-4.0.2/bin/R");
+my $rscript=find_program("/apps/R-4.0.2/bin/Rscript");
+
+#my $r=find_program("/apps/R-3.4.1/bin/R");
+#my $rscript=find_program("/apps/R-3.4.1/bin/Rscript");
 
 
 #######
@@ -204,7 +229,7 @@ if(!-e $scriptfolder) {
 
 
 my $logfile="$outputfolder/rnaseq-de_run.log";
-my $newconfigfile="$outputfolder/rnaseq-de_config.txt";
+
 my $rlogfile="$outputfolder/rnaseq-de_r_env.log";
 
 my $scriptfile1="$scriptfolder/rnaseq-de_run.sh";
@@ -246,7 +271,7 @@ rinfo<-rbind(rinfo,c("R",R.Version()\$version.string))
 rinfo<-rbind(rinfo,c("Rscript","$rscript"))
 rinfo<-rbind(rinfo,c("R library",paste(.libPaths(), collapse=",")))
 
-for (package in c("DESeq2","argparser","ggplot2")) {
+for (package in c("DESeq2","argparser","ggplot2","EnhancedVolcano")) {
 	rinfo<-rbind(rinfo,c(package,packageDescription(package,fields="Version")))
 }
 
@@ -259,7 +284,8 @@ CODE
 close RLOG;
 
 
-#test tx option
+##test tx option
+#may need to change for different annotation versions
 
 my %tx2ref=(
 	"Human.B38.Ensembl84"=> { 
@@ -332,10 +358,6 @@ my %chip2files=(
 );
 
 
-
-
-
-
 ########
 #Process
 ########
@@ -365,190 +387,239 @@ if($formula=~/\~(.+)/) {
 
 print STDERR join(",",@factors_array)," factors are identified from -f $formula\n\n" if $verbose;
 print LOG join(",",@factors_array)," factors are identified from -f $formula\n\n";
+
+
+#---------------
+#read comparisons
+
+my %comparisons_all;
+
+my @trts;
+my @refs;
+
+if(defined $comparisons && length($comparisons)>0) {
+	open(IN,$comparisons) || die $!;
+	while(<IN>) {
+		tr/\r\n//d;
+		#no header
+		
+		my @array=split/\t/;
+		
+		push @trts,$array[0];
+		push @refs,$array[1];
+	}
+}
+else {
+	push @trts,$treatment;
+	push @refs,$reference;
+}
+
+
 		
 #----------------
-#read config file
+open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
-my %sample2fastq;
-my %sample2indexname;
-my %configattrs;
-my %attr2name;
+for(my $compnum=0;$compnum<@trts;$compnum++) {
 
-my @configsamples;
+	my $trt=$trts[$compnum];
+	my $ref=$refs[$compnum];
 
-my $fileline=0;
-my @attrselcols;
-my @sampleselrows;
 
-open(IN,$configfile) || die "Error reading $configfile. $!";
-open(OUT,">$newconfigfile") || die "Error reading $newconfigfile. $!";
+	my $outputfolder_de="$outputfolder/$trt\_vs\_$ref";
 
-while(<IN>) {
-	tr/\r\n//d;
-	my @array=split/\t/;
-	if($fileline==0) {
-		for(my $num=0;$num<@array;$num++) {
-			#case insensitive match to key words
-			$configattrs{uc $array[$num]}=$num;
-		}
-		
-		foreach my $factor (@factors_array) {
-			if(defined $configattrs{uc $factor}) {
-				print STDERR "$factor is identified at the ",$configattrs{uc $factor}+1,"(th) column of $configfile.\n" if $verbose;
-				print LOG "$factor is identified at the ",$configattrs{uc $factor}+1,"(th) column of $configfile.\n";
-				push @attrselcols,$configattrs{uc $factor};
-			}
-			else {
-				print STDERR "ERROR:$factor is not defined in $configfile.\n";
-				print LOG "ERROR:$factor is not defined in $configfile.\n";
-				exit;
-			}
-		}
-		
-		#print out new config for DE
-		print OUT "Sample\t",join("\t",@factors_array),"\n";
+	if(!-e $outputfolder_de) {
+		mkdir($outputfolder_de);
+	}
+
 	
-	}
-	else {
-		
-		push @configsamples,$array[0];
-		
-		#print out config file for DE
-		if($useallsamples eq "T") {
-			print OUT join("\t",@array[0,@attrselcols]),"\n";
-		}
-		else {
-			#only print out used samples
-			if($array[$configattrs{uc $factors_array[$#factors_array]}] eq $treatment || $array[$configattrs{uc $factors_array[$#factors_array]}] eq $reference) {
-				print OUT join("\t",@array[0,@attrselcols]),"\n";
-				push @sampleselrows,$fileline+1; #sample row number in config is the same with sample col number in count file
-			}
-		}
-		
-		foreach my $factor (@factors_array) {
-			$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
-		}
-	}
-	$fileline++;
-}
+	my $newconfigfile="$outputfolder_de/rnaseq-de_config.txt";
+	
+	#read config file
+	my %sample2fastq;
+	my %sample2indexname;
+	my %configattrs;
+	my %attr2name;
 
-close IN;
-close OUT;
+	my @configsamples;
 
-#----------------
-#test treat and ref
-if(defined $attr2name{$factors_array[$#factors_array]}{$treatment}) {
-	print STDERR $attr2name{$factors_array[$#factors_array]}{$treatment}," samples identified for $treatment in $configfile.\n" if $verbose;
-	print LOG $attr2name{$factors_array[$#factors_array]}{$treatment}," samples identified for $treatment in $configfile.\n";
-}
-else {
-	print STDERR "ERROR:$treatment not defined in $configfile.\n";
-	print LOG "ERROR:$treatment not defined in $configfile.\n";	
-	exit;
-}
+	my $fileline=0;
+	my @attrselcols;
+	my @sampleselrows;
 
-if(defined $attr2name{$factors_array[$#factors_array]}{$reference}) {
-	print STDERR $attr2name{$factors_array[$#factors_array]}{$reference}," samples identified for $reference in $configfile.\n" if $verbose;
-	print LOG $attr2name{$factors_array[$#factors_array]}{$reference}," samples identified for $reference in $configfile.\n";
-}
-else {
-	print STDERR "ERROR:$reference not defined in $configfile.\n";
-	print LOG "ERROR:$reference not defined in $configfile.\n";	
-	exit;
-}
+	open(IN,$configfile) || die "Error reading $configfile. $!";
+	open(OUT,">$newconfigfile") || die "Error reading $newconfigfile. $!";
 
-
-
-#----------------
-#check input folder
-
-if(-e "$inputfolder/".$rnaseq2files{"gene"}{"count"}) {
-	open(IN,"$inputfolder/".$rnaseq2files{"gene"}{"count"}) || die $!;
 	while(<IN>) {
 		tr/\r\n//d;
 		my @array=split/\t/;
-		my @mergesamples=@array[1..$#array];
-		
-		if(join(",",@configsamples) ne join(",",@mergesamples)) {
-			print STDERR "ERROR:Sample order different.\n";
-			print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print STDERR "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
+		if($fileline==0) {
+			for(my $num=0;$num<@array;$num++) {
+				#case insensitive match to key words
+				$configattrs{uc $array[$num]}=$num;
+			}
 			
-			print LOG "ERROR:Sample order different.\n";
-			print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
-
-			exit;
+			foreach my $factor (@factors_array) {
+				if(defined $configattrs{uc $factor}) {
+					print STDERR "$factor is identified at the ",$configattrs{uc $factor}+1,"(th) column of $configfile.\n" if $verbose;
+					print LOG "$factor is identified at the ",$configattrs{uc $factor}+1,"(th) column of $configfile.\n";
+					push @attrselcols,$configattrs{uc $factor};
+				}
+				else {
+					print STDERR "ERROR:$factor is not defined in $configfile.\n";
+					print LOG "ERROR:$factor is not defined in $configfile.\n";
+					exit;
+				}
+			}
+			
+			#print out new config for DE
+			print OUT "Sample\t",join("\t",@factors_array),"\n";
+		
 		}
 		else {
-			print STDERR "Sample order matched.\n" if $verbose;
-			print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
-			print STDERR "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
 			
-			print LOG "Sample order matched.\n";
-			print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
-			print LOG "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n";			
+			push @configsamples,$array[0];
+			
+			#print out config file for DE
+			if($useallsamples eq "T") {
+				print OUT join("\t",@array[0,@attrselcols]),"\n";
+			}
+			else {
+				#only print out used samples
+				if($array[$configattrs{uc $factors_array[$#factors_array]}] eq $trt || $array[$configattrs{uc $factors_array[$#factors_array]}] eq $ref) {
+					print OUT join("\t",@array[0,@attrselcols]),"\n";
+					push @sampleselrows,$fileline+1; #sample row number in config is the same with sample col number in count file
+				}
+			}
+			
+			foreach my $factor (@factors_array) {
+				$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
+			}
 		}
-		last;
+		$fileline++;
 	}
+
 	close IN;
-}
-else {
-	print STDERR "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
-	print LOG "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
-	exit;
-}
+	close OUT;
 
-########
-#Filter samples
-########
+	#----------------
+	#test treat and ref
+	if(defined $attr2name{$factors_array[$#factors_array]}{$trt}) {
+		print STDERR $attr2name{$factors_array[$#factors_array]}{$trt}," samples identified for $trt in $configfile.\n" if $verbose;
+		print LOG $attr2name{$factors_array[$#factors_array]}{$trt}," samples identified for $trt in $configfile.\n";
+	}
+	else {
+		print STDERR "ERROR:$trt not defined in $configfile.\n";
+		print LOG "ERROR:$trt not defined in $configfile.\n";	
+		exit;
+	}
 
-if($useallsamples eq "T") {
-	#copy counting files to de folder
-	print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
-	print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
+	if(defined $attr2name{$factors_array[$#factors_array]}{$ref}) {
+		print STDERR $attr2name{$factors_array[$#factors_array]}{$ref}," samples identified for $ref in $configfile.\n" if $verbose;
+		print LOG $attr2name{$factors_array[$#factors_array]}{$ref}," samples identified for $ref in $configfile.\n";
+	}
+	else {
+		print STDERR "ERROR:$ref not defined in $configfile.\n";
+		print LOG "ERROR:$ref not defined in $configfile.\n";	
+		exit;
+	}
+
+
+	#----------------
+	#check input folder
+
+	if(-e "$inputfolder/".$rnaseq2files{"gene"}{"count"}) {
+		open(IN,"$inputfolder/".$rnaseq2files{"gene"}{"count"}) || die $!;
+		while(<IN>) {
+			tr/\r\n//d;
+			my @array=split/\t/;
+			my @mergesamples=@array[1..$#array];
+			
+			if(join(",",@configsamples) ne join(",",@mergesamples)) {
+				print STDERR "ERROR:Sample order different.\n";
+				print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+				print STDERR "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
+				
+				print LOG "ERROR:Sample order different.\n";
+				print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
+				print LOG "ERROR:Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n";
+
+				exit;
+			}
+			else {
+				print STDERR "Sample order matched.\n" if $verbose;
+				print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
+				print STDERR "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
+				
+				print LOG "Sample order matched.\n";
+				print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
+				print LOG "Merged file $inputfolder/",$rnaseq2files{"gene"}{"count"}," sample order:",join(",",@mergesamples),"\n\n";			
+			}
+			last;
+		}
+		close IN;
+	}
+	else {
+		print STDERR "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
+		print LOG "ERROR:$inputfolder/",$rnaseq2files{"gene"}{"count"}," doesn't exist. You need to provide a rnaseq-merge folder.\n";
+		exit;
+	}
+
+	########
+	#Filter samples
+	########
+
+	if($useallsamples eq "T") {
+		#copy counting files to de folder
+		print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
+		print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
+		
+		system("cp $inputfolder/".$rnaseq2files{"gene"}{"count"}." $outputfolder_de/".$rnaseq2files{"gene"}{"selected"});
+		
+		if($txde eq "T") {
+			system("cp $inputfolder/".$rnaseq2files{"tx"}{"count"}." $outputfolder_de/".$rnaseq2files{"tx"}{"selected"});
+		}
+	}
+	else {
+		#copy counting files to de folder, using selected samples
+		print STDERR "--useallsamples F defined. Only selected samples are used for DE test.\n" if $verbose;
+		print STDERR "Sample columns ".join(",",@sampleselrows)." are used.\n\n" if $verbose;
+		
+		print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
+		print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
+
+		system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"gene"}{"count"}." > $outputfolder_de/".$rnaseq2files{"gene"}{"selected"});
+		
+		if($txde eq "T") {
+			system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"tx"}{"count"}." > $outputfolder_de/".$rnaseq2files{"tx"}{"selected"});
+		}
+	}
+
+
+
+	#Print out script
 	
-	system("cp $inputfolder/".$rnaseq2files{"gene"}{"count"}." $outputfolder/".$rnaseq2files{"gene"}{"selected"});
-	system("cp $inputfolder/".$rnaseq2files{"tx"}{"count"}." $outputfolder/".$rnaseq2files{"tx"}{"selected"});
+	#foreach my $sample (sort keys %sample2workflow) {
+	#	print S1 $sample2workflow{$sample},"\n";
+	#}
+
+	#Gene #changed after v0.6
+	print S1 "$rscript $descript -i $outputfolder_de/",$rnaseq2files{"gene"}{"selected"}," -c $newconfigfile -o $outputfolder_de/",$rnaseq2files{"gene"}{"result"}," -f \"$formula\" -t $trt -r $ref --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter -a ",$tx2ref{$tx}{"geneanno"}," > $outputfolder_de/gene_de_test_run.log 2>&1;"; #need to check here #add r script running log
+
+	#Gene anno
+	print S1 "$mergefiles -m $outputfolder_de/",$rnaseq2files{"gene"}{"result"}," -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder_de/",$rnaseq2files{"gene"}{"resultanno"},";\n";
+
+
+	if($txde eq "T") {
+		#Tx
+		print S1 "$rscript $descript -i $outputfolder_de/",$rnaseq2files{"tx"}{"selected"}," -c $newconfigfile -o $outputfolder_de/",$rnaseq2files{"tx"}{"result"}," -f \"$formula\" -t $trt -r $ref --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter"," > $outputfolder_de/tx_de_test_run.log 2>&1;";
+
+		#tx anno
+		print S1 "$mergefiles -m $outputfolder_de/",$rnaseq2files{"tx"}{"result"}," -i ".$tx2ref{$tx}{"txanno"}." -o $outputfolder_de/",$rnaseq2files{"tx"}{"resultanno"},";\n";
+	}
+
 }
-else {
-	#copy counting files to de folder, using selected samples
-	print STDERR "--useallsamples F defined. Only selected samples are used for DE test.\n" if $verbose;
-	print STDERR "Sample columns ".join(",",@sampleselrows)." are used.\n\n" if $verbose;
-	
-	print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
-	print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
-
-	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"gene"}{"count"}." > $outputfolder/".$rnaseq2files{"gene"}{"selected"});
-	system("cut -f 1,".join(",",@sampleselrows)." $inputfolder/".$rnaseq2files{"tx"}{"count"}." > $outputfolder/".$rnaseq2files{"tx"}{"selected"});
-}
-
-########
-#Print out commands, for local and server run
-########
-
-
-open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
-
-#foreach my $sample (sort keys %sample2workflow) {
-#	print S1 $sample2workflow{$sample},"\n";
-#}
-
-#Gene
-print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"gene"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"gene"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
-
-#Gene anno
-print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"gene"}{"result"}," -i ".$tx2ref{$tx}{"geneanno"}." -o $outputfolder/",$rnaseq2files{"gene"}{"resultanno"},";\n";
-
-
-#Tx
-print S1 "$rscript $descript -i $outputfolder/",$rnaseq2files{"tx"}{"selected"}," -a $newconfigfile -o $outputfolder/",$rnaseq2files{"tx"}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
-
-#tx anno
-print S1 "$mergefiles -m $outputfolder/",$rnaseq2files{"tx"}{"result"}," -i ".$tx2ref{$tx}{"txanno"}." -o $outputfolder/",$rnaseq2files{"tx"}{"resultanno"},";\n";
 
 close S1;
-
 
 
 
@@ -696,8 +767,6 @@ sub find_program {
 	}
 }
 
-
-
 sub get_parent_folder {
 	my $dir=shift @_;
 	
@@ -705,5 +774,6 @@ sub get_parent_folder {
 		return $1;
 	}
 }
+
 
 

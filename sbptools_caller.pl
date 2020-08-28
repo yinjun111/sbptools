@@ -4,7 +4,7 @@ use Getopt::Long;
 use File::Basename;
 use Cwd qw(abs_path);
 
-my $version="0.52";
+my $version="0.6";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
@@ -13,6 +13,8 @@ my $version="0.52";
 #v0.5, new procedure to expand rnaseq processing functions
 #v0.51, update rnaseq-var to v2
 #v0.52, start to support different sbptools versions
+#v0.6, major updates planned for R4.0, chipseq Firefly compatibility, Ensembl v100, de novo assembler, git compatibility
+
 
 my $usage="
 

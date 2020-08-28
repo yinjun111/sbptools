@@ -2,7 +2,8 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
+
 
 ########
 #Updates
@@ -15,10 +16,10 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.11";
+my $version="0.12";
 
 #v0.11, add heatmap generation to p/q matrix
-
+#v0.12, R 4.0
 
 my $usage="
 
@@ -87,9 +88,11 @@ GetOptions(
 ######
 
 
-my $r=find_program("/apps/R-3.4.1/bin/R");
-my $rscript=find_program("/apps/R-3.4.1/bin/Rscript");
+#my $r=find_program("/apps/R-3.4.1/bin/R");
+#my $rscript=find_program("/apps/R-3.4.1/bin/Rscript");
 
+my $r=find_program("/apps/R-4.0.2/bin/R");
+my $rscript=find_program("/apps/R-4.0.2/bin/Rscript");
 
 my $sbptoolsfolder="/apps/sbptools/";
 
@@ -97,6 +100,12 @@ my $sbptoolsfolder="/apps/sbptools/";
 if($dev) {
 	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
 }
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(dirname(abs_path($0)));
+}
+
+
 
 #sbptools
 my $gs_heatmap="$sbptoolsfolder/gsea-gen-summary/gs_heatmap.R";
@@ -451,6 +460,16 @@ sub find_program {
 			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
 			exit;
 		}
+	}
+}
+
+
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
 	}
 }
 

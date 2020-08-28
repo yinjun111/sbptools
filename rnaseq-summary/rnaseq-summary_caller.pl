@@ -15,7 +15,7 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.61";
+my $version="0.62";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
@@ -26,7 +26,7 @@ my $version="0.61";
 #v0.52, new gsea-gen params
 #v0.6, gsea-gen/summary and rnaseq-motif/summary will be ran by parallel-job 
 #v0.61, versioning
-
+#v0.62, DE folder signature changed
 
 my $usage="
 
@@ -293,7 +293,8 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 	foreach my $folder (@folders) {
 		if(-d $folder) {
 			#print STDERR $folder,"#2\n";
-			if(-e "$folder/rnaseq-de_run.log") {
+			#this signature file is changed in v0.6
+			if(-e "$folder/gene_de_test_run.log") {
 				#rnaseq-de folder
 				my $foldername=basename($folder);
 				
