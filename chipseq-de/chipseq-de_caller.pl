@@ -2,39 +2,19 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
-
-
-########
-#Prerequisites
-########
-
-
-my $rscript="/apps/R-3.4.1/bin/Rscript";
-
-my $homer="/home/jyin/Programs/Homer/bin";
-my $findmotifsgenome="$homer/findMotifsGenome.pl";
-
-my $descript="/home/jyin/Projects/Pipeline/sbptools/rnaseq-de/de_test_caller.R";
-my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
-my $reformatpeakcount="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/reformat_peak_count.pl";
-my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
-my $desummarybycalling="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks_bycalling.pl";
-my $convertdetopos="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_pos.pl";
-
-
+use File::Basename qw(basename dirname);
 
 ########
 #Interface
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #version 0.2, add de summary script
 #v0.3, add de summary by peak calling
 #v0.31, solves screen envinroment problem
-
+#v0.4, Firefly compatible. Versioning. R 4.0
 
 my $usage="
 
@@ -74,8 +54,13 @@ Optional Parameters:
     --fccutoff        Log2 FC cutoff [1]
     --qcutoff         Corrected P cutoff [0.05]
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+    --runmode|-r      Where to run the scripts, cluster, local, or none [none]
+
+    Parallel computating parameters
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+    --ncpus           No. of cpus for each task [4]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
+
 	
 ";
 
@@ -129,7 +114,12 @@ my $qcutoff=0.05;
 my $verbose=1;
 my $tx;
 my $runmode="none";
-my $jobs=5;
+
+my $task;
+my $ncpus=4;
+my $mem="40gb";
+my $dev=0; #developmental version
+
 
 GetOptions(
 	"in|i=s" => \$inputfolder,
@@ -150,9 +140,73 @@ GetOptions(
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,		
-	"jobs|j=s" => \$jobs,
+
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,
+
+	"dev" => \$dev,			
+
 	"verbose|v" => \$verbose,
 );
+
+
+
+#tasks, local 4, cluster 8
+unless(defined $task && length($task)>0) {
+	if($runmode eq "cluster") {
+		$task=8;
+	}
+	else {
+		$task=4;
+	}
+}
+
+
+
+########
+#Prerequisites
+########
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $processmergebed="$sbptoolsfolder/chipseq-merge/process_mergebed.pl";
+my $selectbed="$sbptoolsfolder/chipseq-merge/select_mergebed.pl";
+
+my $descript="$sbptoolsfolder/rnaseq-de/de_test_caller.R";
+my $reformatpeakcount="$sbptoolsfolder/chipseq-de/reformat_peak_count.pl";
+my $desummary="$sbptoolsfolder/chipseq-de/summarize_dm_peaks.pl";
+my $desummarybycalling="$sbptoolsfolder/chipseq-de/summarize_dm_peaks_bycalling.pl";
+my $convertdetopos="$sbptoolsfolder/chipseq-de/convert_chipseq_de_to_pos.pl";
+
+
+#homer
+my $homer="/apps/homer/bin/";
+my $findmotifsgenome="$homer/findMotifsGenome.pl";
+
+
+my $r=find_program("/apps/R-4.0.2/bin/R");
+my $rscript=find_program("/apps/R-4.0.2/bin/Rscript");
+
+
+
+########
+#I/O
+########
+
 
 $inputfolder = abs_path($inputfolder);
 
@@ -174,6 +228,10 @@ my $logfile="$outputfolder/chipseq-de_run.log";
 my $newconfigfile="$outputfolder/chipseq-de_config.txt";
 
 my $scriptfile1="$scriptfolder/chipseq-de_run.sh";
+
+my $scriptlocalrun="$outputfolder/chipseq-de_local_submission.sh";
+my $scriptclusterrun="$outputfolder/chipseq-de_cluster_submission.sh";
+
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -418,7 +476,10 @@ else {
 #convert files
 foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 	print STDERR "Converting $inputfolder/",$chipseq2files{$attr}{"raw"}," for DE test.\n";
-	system("$reformatpeakcount $inputfolder/".$chipseq2files{$attr}{"raw"}." $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"anno"});
+	print LOG "Converting $inputfolder/",$chipseq2files{$attr}{"raw"}," for DE test.\n";
+	
+	system("$reformatpeakcount -i $inputfolder/".$chipseq2files{$attr}{"raw"}." -o $outputfolder/".$chipseq2files{$attr}{"count"}." -a $outputfolder/".$chipseq2files{$attr}{"anno"}." -c $newconfigfile");
+	print LOG "$reformatpeakcount -i $inputfolder/".$chipseq2files{$attr}{"raw"}." -o $outputfolder/".$chipseq2files{$attr}{"count"}." -a $outputfolder/".$chipseq2files{$attr}{"anno"}." -c $newconfigfile\n";
 }
 
 open(IN,"$outputfolder/".$chipseq2files{"all"}{"count"}) || die $!;
@@ -493,7 +554,7 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 	
 	#DE by Signal ...
-	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"selected"}," -a $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
+	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"selected"}," -c $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
 
 	#summary and annotation 
@@ -539,48 +600,89 @@ close S1;
 
 
 
-
 #######
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+my @scripts_all=($scriptfile1);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="chipseq-de-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
+
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";	
+}
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
-
 close LOG;
+
+
 ########
 #Functions
 ########
@@ -616,6 +718,43 @@ sub build_timestamp {
 
 
 
+
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	#use defined program as default, otherwise search for this program in PATH
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
+}
+
+
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}
 
 
 

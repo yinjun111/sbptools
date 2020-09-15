@@ -2,32 +2,7 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
-
-#CutAdapt+FASTQC+RSEM+STAR
-
-
-########
-#Prerequisites
-########
-
-my $multiqc="/home/jyin/.local/bin/multiqc";
-my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
-
-my $mergebed="/apps/bedtools2-2.26.0/bin/bedtools merge";
-my $processmergebed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-merge/process_mergebed.pl";
-my $selectbed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-merge/select_mergebed.pl";
-
-#homer location
-my $homer="/home/jyin/Programs/Homer/bin";
-my $findpeaks="$homer/findPeaks";
-my $makeucscfile="$homer/makeUCSCfile";
-my $pos2bed="$homer/pos2bed.pl";
-my $bed2pos="$homer/bed2pos.pl";
-my $annotatepeaks="$homer/annotatePeaks.pl";
-
-#UCSC
-my $bedtobigbed="/apps/ucsc/bedToBigBed";
+use File::Basename qw(basename dirname);
 
 
 ########
@@ -35,12 +10,12 @@ my $bedtobigbed="/apps/ucsc/bedToBigBed";
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #v0.2 now skips input samples for merging
 #v0.3, removed -v, add -r implementation for local
 #v0.31, solves screen envinroment problem
-
+#v0.4, firefly support
 
 my $usage="
 
@@ -52,7 +27,7 @@ Description: Merge chipseq-process folder to get summarized QC, counting for pro
 
 Parameters:
 
-    --in|-i           Input folder(s)
+    --in|-i           Input chipseq-process folder(s)
 	
     --config|-c       Configuration file #at this stage, configuration only, to make merged peaks
     --group|-g        Column name for sample groups to merge peaks
@@ -68,7 +43,11 @@ Parameters:
     --anno|-a         Add annotation
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 5 jobs. [5]
+
+    Parallel computating parameters
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+    --ncpus           No. of cpus for each task [4]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
 
 ";
@@ -101,7 +80,12 @@ my $outputfolder;
 my $verbose=1;
 my $tx;
 my $runmode="none";
-my $jobs=5;
+#my $jobs=5;
+
+my $task;
+my $ncpus=4;
+my $mem="40gb";
+my $dev=0; #developmental version
 
 GetOptions(
 	"in|i=s" => \$inputfolders,
@@ -112,11 +96,75 @@ GetOptions(
 	"samplesubset|sss=s" => \$samplesubset,		
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
-	"jobs|j=s" => \$jobs,
+	#"jobs|j=s" => \$jobs,
+	
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,
+
+	"dev" => \$dev,			
+
 	"runmode|r=s" => \$runmode,		
 	"verbose|v=s" => \$verbose,
 );
 
+
+#tasks, local 4, cluster 8
+unless(defined $task && length($task)>0) {
+	if($runmode eq "cluster") {
+		$task=8;
+	}
+	else {
+		$task=4;
+	}
+}
+
+
+########
+#Prerequisites
+########
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $processmergebed="$sbptoolsfolder/chipseq-merge/process_mergebed.pl";
+my $selectbed="$sbptoolsfolder/chipseq-merge/select_mergebed.pl";
+
+
+my $multiqc=find_program("/apps/python-3.5.2/bin/multiqc");
+my $cutadapt=find_program("/apps/python-3.5.2/bin/cutadapt");
+my $fastqc=find_program("/apps/FastQC/fastqc");
+my $rsem=find_program("/apps/RSEM-1.3.1/rsem-calculate-expression");
+my $star=find_program("/apps/STAR-master/bin/Linux_x86_64/STAR");
+my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
+my $samtools=find_program("/apps/samtools-1.3.1/bin/samtools");
+my $mergebed=find_program("/apps/bedtools2-2.26.0/bin/bedtools")." merge";
+my $bedtobigbed=find_program("/apps/ucsc/bedToBigBed");
+
+#homer
+my $homer="/apps/homer/bin/";
+#my $homer="/home/jyin/Programs/Homer/bin";
+my $maketagdirectory="$homer/makeTagDirectory";
+my $annotatepeaks="$homer/annotatePeaks.pl";
+my $findpeaks="$homer/findPeaks";
+my $makeucscfile="$homer/makeUCSCfile";
+my $pos2bed="$homer/pos2bed.pl";
+my $bed2pos="$homer/bed2pos.pl";
+
+
+#########
 
 #default ouputs
 
@@ -158,6 +206,11 @@ my $logfile="$outputfolder/chipseq-merge_run.log";
 
 my $scriptfile1="$scriptfolder/chipseq-merge_run1.sh";
 my $scriptfile2="$scriptfolder/chipseq-merge_run2.sh";
+
+
+my $scriptlocalrun="$outputfolder/chipseq-merge_local_submission.sh";
+my $scriptclusterrun="$outputfolder/chipseq-merge_cluster_submission.sh";
+
 
 #new config
 my $newconfigfile="$outputfolder/chipseq-merge_config.txt";
@@ -638,47 +691,88 @@ close S2;
 
 
 
-
 #######
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+my @scripts_all=($scriptfile1,$scriptfile2);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="chipseq-merge-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
-my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
+
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";	
+}
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
 close LOG;
+
 
 
 ########
@@ -710,6 +804,43 @@ sub getsysoutput {
 	my $output=`$command`;
 	$output=~tr/\r\n//d;
 	return $output;
+}
+
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	#use defined program as default, otherwise search for this program in PATH
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
+}
+
+
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
 }
 
 

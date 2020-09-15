@@ -2,39 +2,23 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 use List::Util qw(sum);
 
-#CutAdapt+FASTQC+RSEM+STAR
-
-
-########
-#Prerequisites
-########
-
-my $multiqc="/home/jyin/.local/bin/multiqc";
-my $mergefiles="perl /home/jyin/Projects/Pipeline/sbptools/mergefiles/mergefiles_caller.pl";
-my $desummary="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/summarize_dm_peaks.pl";
-
-my $convertdetobed="perl /home/jyin/Projects/Pipeline/sbptools/chipseq-de/convert_chipseq_de_to_bed.pl";
-my $homer="/home/jyin/Programs/Homer/bin";
-#my $findmotifsgenome="$homer/findMotifsGenome.pl";
-
-my $motiffinder="perl /home/jyin/Projects/Pipeline/sbptools/motif-finder/motif-finder_caller.pl";
 
 ########
 #Interface
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #v0.1a, revised merge.txt title
 #v0.2, add tfbs
 #v0.2a, improved tfbs
 #v0.3, add runmode
 #v0.31, solves screen envinroment problem
-
+#v0.4 Firefly, versioning, etc.
 
 my $usage="
 
@@ -50,7 +34,7 @@ Description: Summarize chipseq-de results and recalculate significance if needed
 
 Parameters:
 
-    --in|-i           Input folder(s)
+    --in|-i           Input folder(s). chipseq-de parent folder.
     --output|-o       Output folder
 
     --fccutoff        Log2 FC cutoff, optional
@@ -61,8 +45,12 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 3 jobs. [3]
+    --runmode|-r      Where to run the scripts, cluster, local, or none [none]
+
+    Parallel computating parameters
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+    --ncpus           No. of cpus for each task [4]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 	
 	
 ";
@@ -105,6 +93,13 @@ my $pcol=4; #hidden param
 my $runmode="none";
 my $jobs=3;
 
+my $task;
+my $ncpus=4;
+my $mem="40gb";
+my $dev=0; #developmental version
+
+
+
 GetOptions(
 	"in|i=s" => \$inputfolders,
 	"output|o=s" => \$outputfolder,
@@ -120,9 +115,40 @@ GetOptions(
 	
 	"tx|t=s" => \$tx,	
 	"runmode|r=s" => \$runmode,	
-	"jobs|j=s" => \$jobs,	
+
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,
+
+	"dev" => \$dev,	
+
 	"verbose|v" => \$verbose,
 );
+
+
+########
+#Prerequisites
+########
+
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
+my $desummary="$sbptoolsfolder/chipseq-de/summarize_dm_peaks.pl";
+my $convertdetobed="$sbptoolsfolder/chipseq-de/convert_chipseq_de_to_bed.pl";
+my $motiffinder="$sbptoolsfolder/motif-finder/motif-finder_caller.pl";
 
 
 ########
@@ -146,6 +172,9 @@ if(!-e "$outputfolder/forIPA") {
 }
 
 my $logfile="$outputfolder/chipseq-summary_run.log";
+
+my $scriptlocalrun="$outputfolder/chipseq-summary_local_submission.sh";
+my $scriptclusterrun="$outputfolder/chipseq-summary_cluster_submission.sh";
 
 
 
@@ -275,12 +304,12 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 					
 					if($file=~/all.reprod.peak.merged.raw.count.+summary.txt/) {
 						$folder2allbysignalsum{$foldername}=$folder2dir{$foldername}."/".$file;
-						$bysignalsumfiles{$folder2dir{$foldername}."/".$file}++;
+						#$bysignalsumfiles{$folder2dir{$foldername}."/".$file}++;
 					}					
 					
 					if($file=~/all.reprod.peak.merged.dm.bycalling.summary.txt/) {
 						$folder2allbycallingsum{$foldername}=$folder2dir{$foldername}."/".$file;
-						$bycallingsumfiles{$folder2dir{$foldername}."/".$file}++;
+						#$bycallingsumfiles{$folder2dir{$foldername}."/".$file}++;
 					}
 				}
 			}
@@ -329,6 +358,15 @@ foreach my $folder (sort keys %folder2allbycallingsum) {
 #Work on gene DE files
 #####
 
+#check fccutoff and qcutoff
+if(defined $fccutoff && length($fccutoff)>0) {
+	unless(defined $qcutoff && length($qcutoff)>0) {
+		print STDERR "ERROR:Both --fccutoff and --qcutoff need to be redefined.\n";
+		print LOG "ERROR:Both --fccutoff and --qcutoff need to be redefined.\n";
+		exit;
+	}
+}
+
 #read file
 my %folder2genesig;
 my %folder2geneinfo;
@@ -336,114 +374,121 @@ my %folder2genetitle;
 
 open(S1,">$scriptfile1") || die "ERROR:Can't write into $scriptfile1.$!\n";
 
-#redefine DM peaks
-if(defined $fccutoff && length($fccutoff)>0) {
-	if(defined $qcutoff && length($qcutoff)>0) {
-		
-		#empty bysignalsumfiles
-		%bysignalsumfiles=();
-		
-		foreach my $folder (sort keys %folder2allbysignal) {
+foreach my $folder (sort keys %folder2allbysignal) {
 
-			print STDERR "Processing ",$folder2allbysignal{$folder},"\n" if $verbose;
-			print LOG "Processing ",$folder2allbysignal{$folder},"\n";
-			
-			#my $foripafile="$folder\_GeneDE.foripa.txt";
-			
-			#print out file ready for IPA
-			#system("cut -f 1,2,5 ".$folder2dir{$folder}."/".$folder2allbysignal{$folder}."> $outputfolder/forIPA/$foripafile");
-			
-			open(IN,$folder2allbysignal{$folder}) || die $!;
-			open(OUT,">$outputfolder/$folder\_BySignal_Reformated.txt") || die $!;
-			
-			while(<IN>) {
-				tr/\r\n//d;
-				my @array=split/\t/;
-				
-				if($_=~/^\W/) {
+	print STDERR "Processing ",$folder2allbysignal{$folder},"\n" if $verbose;
+	print LOG "Processing ",$folder2allbysignal{$folder},"\n";
+	
+	#my $foripafile="$folder\_GeneDE.foripa.txt";
+	
+	#print out file ready for IPA
+	#system("cut -f 1,2,5 ".$folder2dir{$folder}."/".$folder2allbysignal{$folder}."> $outputfolder/forIPA/$foripafile");
+	
+	if( defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
+		open(IN,$folder2allbysignal{$folder}) || die $!;
+		open(OUT,">$outputfolder/$folder\_BySignal_Reformated.txt") || die $!;
 
-					if(defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
-						$array[5]="Significance: Log2FC $fccutoff BHP $qcutoff";
-					}
-					elsif((defined $fccutoff && length($fccutoff)>0) || (defined $qcutoff && length($qcutoff)>0)) {
-						print STDERR "ERROR: --fccutoff and --qcutoff have to be both defined.\n\n";
-						print LOG "ERROR: --fccutoff and --qcutoff have to be both defined.\n\n";
-						exit;
-					}
-					
-					#$folder2genetitle{$folder}=join("\t",@array);
-					print OUT join("\t",@array),"\n";
+		print STDERR "Convert $folder2allbysignal{$folder} to $outputfolder/$folder\_BySignal_Reformated.txt\n";
+		print LOG "Convert $folder2allbysignal{$folder} to $outputfolder/$folder\_BySignal_Reformated.txt\n";
+		
+		while(<IN>) {
+			tr/\r\n//d;
+			my @array=split/\t/;
+			
+			if($_=~/^\W/) {
+
+				if(defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
+					$array[5]="Significance: Log2FC $fccutoff BHP $qcutoff";
 				}
-				else {
-					
-					#record genes
-					#unless(defined $geneinput && length($geneinput)>0) {
-					#	$genes{$array[0]}++;
-					#}
-					
-					#new fc and q
-					if($array[$pcol] ne "NA" && $array[$pcol] ne " ") {
-						if(defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
-							if($array[1] >= $fccutoff && $array[$pcol] < $qcutoff) {
-								$array[5]=1;
-							}
-							elsif($array[1] <= -$fccutoff && $array[$pcol] < $qcutoff) {
-								$array[5]=-1;
-							}
-							else{
-								$array[5]=0;
-							}
+				elsif((defined $fccutoff && length($fccutoff)>0) || (defined $qcutoff && length($qcutoff)>0)) {
+					print STDERR "ERROR: --fccutoff and --qcutoff have to be both defined.\n\n";
+					print LOG "ERROR: --fccutoff and --qcutoff have to be both defined.\n\n";
+					exit;
+				}
+				
+				#$folder2genetitle{$folder}=join("\t",@array);
+				print OUT join("\t",@array),"\n";
+			}
+			else {
+				
+				#record genes
+				#unless(defined $geneinput && length($geneinput)>0) {
+				#	$genes{$array[0]}++;
+				#}
+				
+				#new fc and q
+				if($array[$pcol] ne "NA" && $array[$pcol] ne " ") {
+					if(defined $fccutoff && length($fccutoff)>0 && defined $qcutoff && length($qcutoff)>0) {
+						if($array[1] >= $fccutoff && $array[$pcol] < $qcutoff) {
+							$array[5]=1;
+						}
+						elsif($array[1] <= -$fccutoff && $array[$pcol] < $qcutoff) {
+							$array[5]=-1;
+						}
+						else{
+							$array[5]=0;
 						}
 					}
-					
-					#$folder2genesig{$folder}{$array[0]}=$array[5];
-					#$folder2geneinfo{$folder}{$array[0]}=join("\t",@array);
-					
-					print OUT join("\t",@array),"\n";
 				}
+				
+				#$folder2genesig{$folder}{$array[0]}=$array[5];
+				#$folder2geneinfo{$folder}{$array[0]}=join("\t",@array);
+				
+				print OUT join("\t",@array),"\n";
 			}
-			close IN;
-			close OUT;
-			
-			#regenerate By Signal Sum
-			
-			system("$desummary -i $outputfolder/$folder\_BySignal_Reformated.txt --tx $tx --out $outputfolder/$folder\_BySignal_Reformated_summary.txt");
-			
-			#TFBS
-			if($tfbs eq "T") {
-				#TFBS
-				mkdir("$outputfolder/$folder\_deboth_tfbs");
-				mkdir("$outputfolder/$folder\_deup_tfbs");
-				mkdir("$outputfolder/$folder\_dedown_tfbs");
-				
-				#change the implementation, so that it can be better paralleled
-				system("$convertdetobed -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.bed;");
-				#run the three processes in bg
-
-				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de.pos $genomeversion $outputfolder/$folder\_deboth_tfbs -size given -preparsedDir $outputfolder/$folder\_deboth_tfbs/preparsed &";
-				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_up.pos $genomeversion $outputfolder/$folder\_deup_tfbs -size given -preparsedDir $outputfolder/$folder\_deup_tfbs/preparsed &";
-				#print S1 "$findmotifsgenome $outputfolder/$folder\_BySignal_Reformated_de_down.pos $genomeversion $outputfolder/$folder\_dedown_tfbs -size given -preparsedDir $outputfolder/$folder\_dedown_tfbs/preparsed &";
-				#print S1 "\n";				
-				
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de.bed -o $outputfolder/$folder\_deboth_tfbs/ -t $tx;\n";
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_up.bed -o $outputfolder/$folder\_deup_tfbs/ -t $tx;\n";
-				print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_down.bed -o $outputfolder/$folder\_dedown_tfbs/ -t $tx;\n";
-				
-				
-
-			}
-	
-			#redefine sum file
-			$folder2allbysignalsum{$folder}="$outputfolder/$folder\_BySignal_Reformated_summary.txt";
-			
-			$bysignalsumfiles{"$outputfolder/$folder\_BySignal_Reformated_summary.txt"}++;
-			
-			
 		}
+		close IN;
+		close OUT;
+
+		#regenerate By Signal Sum
+		system("$desummary -i $outputfolder/$folder\_BySignal_Reformated.txt --tx $tx --out $outputfolder/$folder\_BySignal_Reformated_summary.txt");
+
+		#redefine sum file
+		$folder2allbysignalsum{$folder}="$outputfolder/$folder\_BySignal_Reformated_summary.txt";
+
+	
+		#$bysignalsumfiles{"$outputfolder/$folder\_BySignal_Reformated_summary.txt"}++;
+
 	}
 	else {
-		print STDERR "ERROR:Both --fccutoff and --qcutoff need to be redefined.\n";
+		system("cp $folder2allbysignal{$folder} $outputfolder/$folder\_BySignal_Reformated.txt");
+		system("cp $folder2allbysignalsum{$folder} $outputfolder/$folder\_BySignal_Reformated_summary.txt");
+		
+		print STDERR "cp $folder2allbysignal{$folder} $outputfolder/$folder\_BySignal_Reformated.txt\n";
+		print LOG "cp $folder2allbysignal{$folder} $outputfolder/$folder\_BySignal_Reformated.txt\n";
+		
+		print STDERR "cp $folder2allbysignalsum{$folder} $outputfolder/$folder\_BySignal_Reformated_summary.txt\n";
+		print LOG "cp $folder2allbysignalsum{$folder} $outputfolder/$folder\_BySignal_Reformated_summary.txt\n";
 	}
+						
+	
+	#for IPA here
+	
+	#Directional total
+	system("printf \"Gene\tLog2FC\n\" > $outputfolder/forIPA/$folder\_BySignal_DirectionalTotal_forIPA.txt;cut -f 1,8 $outputfolder/$folder\_BySignal_Reformated_summary.txt | sed '1d' >> $outputfolder/forIPA/$folder\_BySignal_DirectionalTotal_forIPA.txt");
+	print LOG "printf \"Gene\tLog2FC\n\" > $outputfolder/forIPA/$folder\_BySignal_DirectionalTotal_forIPA.txt;cut -f 1,8 $outputfolder/$folder\_BySignal_Reformated_summary.txt | sed '1d' >> $outputfolder/forIPA/$folder\_BySignal_DirectionalTotal_forIPA.txt\n";
+	
+	#Promoter
+	system("printf \"Gene\tLog2FC\n\" > $outputfolder/forIPA/$folder\_BySignal_Promoter_forIPA.txt;cut -f 1,6 $outputfolder/$folder\_BySignal_Reformated_summary.txt | sed '1d' >> $outputfolder/forIPA/$folder\_BySignal_Promoter_forIPA.txt");
+	print LOG "printf \"Gene\tLog2FC\n\" > $outputfolder/forIPA/$folder\_BySignal_Promoter_forIPA.txt;cut -f 1,6 $outputfolder/$folder\_BySignal_Reformated_summary.txt | sed '1d' >> $outputfolder/forIPA/$folder\_BySignal_Promoter_forIPA.txt\n";
+	
+	
+	#TFBS
+	if($tfbs eq "T") {
+		#TFBS
+		mkdir("$outputfolder/$folder\_deboth_tfbs");
+		mkdir("$outputfolder/$folder\_deup_tfbs");
+		mkdir("$outputfolder/$folder\_dedown_tfbs");
+		
+		#change the implementation, so that it can be better paralleled
+		system("$convertdetobed -i $outputfolder/$folder\_BySignal_Reformated.txt -o $outputfolder/$folder\_BySignal_Reformated_de.bed;");
+	
+		#needs to be updated by adding background?
+		print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de.bed -o $outputfolder/$folder\_deboth_tfbs/ -t $tx;\n";
+		print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_up.bed -o $outputfolder/$folder\_deup_tfbs/ -t $tx;\n";
+		print S1 "$motiffinder -i $outputfolder/$folder\_BySignal_Reformated_de_down.bed -o $outputfolder/$folder\_dedown_tfbs/ -t $tx;\n";
+		
+	}					
 }
 
 close S1;
@@ -537,44 +582,86 @@ system("cp ".$tx2ref{$tx}{"geneanno"}." $outputfolder/geneanno.txt");
 
 
 if($tfbs eq "T") {
+
+	open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+	open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
+
+
+	my @scripts_all=($scriptfile1);
+
+
+	#print out command for local and cluster parallel runs
 	my $jobnumber=0;
 	my $jobname="chipseq-summary-$timestamp";
 
-	if($jobs eq "auto") {
+	if($task eq "auto") {
 		$jobnumber=0;
 	}
 	else {
-		$jobnumber=$jobs;
+		$jobnumber=$task;
 	}
 
-	my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+	my @local_runs;
+	my @script_names;
+
+	foreach my $script (@scripts_all) {
+		push @local_runs,"cat $script | parallel -j $jobnumber";
+
+		if($script=~/([^\/]+)\.\w+$/) {
+			push @script_names,$1;
+		}
+	}
+
+	my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+	print LOUT $localcommand,"\n";
+	close LOUT;
+
+	#print out command for cluster parallel runs
+
+	my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+	if(defined $mem && length($mem)>0) {
+		$clustercommand.=" -m $mem";	
+	}
+
+	print SOUT $clustercommand,"\n";
+	close SOUT;
+
 
 
 	if($runmode eq "none") {
-		print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-		print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+		print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+		print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+		
+		print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+		print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 	}
 	elsif($runmode eq "local") {
 		#local mode
+		#implemented for Falco
 		
-		#need to replace with "sbptools queuejob" later
-
-		system($localcommand);
-		print LOG "$localcommand;\n\n";
+		system("sh $scriptlocalrun");
+		print LOG "sh $scriptlocalrun;\n\n";
 
 		print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 		print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 		
 	}
-	elsif($runmode eq "server") {
-		#server mode
+	elsif($runmode eq "cluster") {
+		#cluster mode
+		#implement for Firefly
 		
-		#implement for firefly later
+		system("sh $scriptclusterrun");
+		print LOG "sh $scriptclusterrun;\n\n";
+
+		print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 	}
 
+	close LOG;
 }
 
-close LOG;
 
 
 
@@ -642,6 +729,44 @@ sub build_timestamp {
 	}
 	
 	return $now;
+}
+
+
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	#use defined program as default, otherwise search for this program in PATH
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
+}
+
+
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
 }
 
 
