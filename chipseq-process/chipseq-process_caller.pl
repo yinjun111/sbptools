@@ -2,43 +2,25 @@
 use strict;
 use Getopt::Long;
 use Cwd qw(abs_path);
-use File::Basename qw(basename);
+use File::Basename qw(basename dirname);
 
 #CutAdapt+FASTQC+RSEM+STAR
 
-
-########
-#Prerequisites
-########
-
-my $cutadapt="/home/jyin/.local/bin/cutadapt";
-my $fastqc="/apps/FastQC/fastqc";
-
-#star
-my $star="/apps/STAR-master/bin/Linux_x86_64/STAR";
-
-#homer
-my $homer="/home/jyin/Programs/Homer/bin";
-my $maketagdirectory="$homer/makeTagDirectory";
-my $annotatepeaks="$homer/annotatePeaks.pl";
-my $findpeaks="$homer/findPeaks";
-my $makeucscfile="$homer/makeUCSCfile";
-my $pos2bed="$homer/pos2bed.pl";
-
-#UCSC
-my $bedtobigbed="/apps/ucsc/bedToBigBed";
 
 ########
 #Interface
 ########
 
 
-my $version="0.31";
+my $version="0.4";
 
 #v0.1 add --atacseq for cutadapt 
 #v0.2 add TF support
 #v0.3 add runmode
 #v0.31, solves screen envinroment problem
+#v0.4, firefly, v0.6 comp, R ...
+
+
 
 my $usage="
 
@@ -67,11 +49,11 @@ Parameters:
                            tf, Transcription Factor ChIP-Seq
 
     Parallel computating parameters
-    --core            No. of cores or threads used by each job [4]
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+    --ncpus           No. of cpus for each task [4]
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
     --runmode|-r      Where to run the scripts, local, server or none [none]
-    --jobs|-j         Number of jobs to be paralleled. By default 4 jobs. [4]
-
 	
 	
 ";
@@ -99,21 +81,90 @@ my $verbose=1;
 my $tx;
 my $runmode="none";
 my $type="HISTONE";
-my $core=4;
-my $jobs=4;
+my $runbamcoverage="F";
+
+my $task;
+my $ncpus=4;
+my $mem="40gb";
+
+#my $jobs=4;
+
+my $dev=0; #developmental version
+
 #my $atacseq=0;
 
 GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,	
-	"core=s" => \$core,	
-	"runmode|r=s" => \$runmode,		
-	#"atacseq" => \$atacseq,
-	"jobs|j=s" => \$jobs,	
+	#"core=s" => \$core,	
+	"runmode|r=s" => \$runmode,	
+	
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"mem=s" => \$mem,
+	
 	"type=s" => \$type,
+	"dev" => \$dev,			
 	"verbose|v" => \$verbose,
 );
+
+
+#tasks, local 4, cluster 8
+unless(defined $task && length($task)>0) {
+	if($runmode eq "cluster") {
+		$task=8;
+	}
+	else {
+		$task=4;
+	}
+}
+
+########
+#Prerequisites
+########
+
+
+my $sbptoolsfolder="/apps/sbptools/";
+
+#adding --dev switch for better development process
+if($dev) {
+	$sbptoolsfolder="/home/jyin/Projects/Pipeline/sbptools/";
+}
+else {
+	#the tools called will be within the same folder of the script
+	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
+}
+
+
+my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
+
+
+my $cutadapt=find_program("/apps/python-3.5.2/bin/cutadapt");
+my $fastqc=find_program("/apps/FastQC/fastqc");
+my $rsem=find_program("/apps/RSEM-1.3.1/rsem-calculate-expression");
+my $star=find_program("/apps/STAR-master/bin/Linux_x86_64/STAR");
+my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
+my $samtools=find_program("/apps/samtools-1.3.1/bin/samtools");
+
+
+
+#homer
+my $homer="/apps/homer/bin/";
+#my $homer="/home/jyin/Programs/Homer/bin";
+my $maketagdirectory="$homer/makeTagDirectory";
+my $annotatepeaks="$homer/annotatePeaks.pl";
+my $findpeaks="$homer/findPeaks";
+my $makeucscfile="$homer/makeUCSCfile";
+my $pos2bed="$homer/pos2bed.pl";
+
+#UCSC
+my $bedtobigbed="/apps/ucsc/bedToBigBed";
+
+
+#####
+#
+######
 
 
 #upcase $type
@@ -138,6 +189,11 @@ my $newconfigfile="$outputfolder/chipseq-processs_config.txt";
 
 my $scriptfile1="$scriptfolder/chipseq-processs_run1.sh";
 my $scriptfile2="$scriptfolder/chipseq-processs_run2.sh";
+
+
+my $scriptlocalrun="$outputfolder/chipseq-process_local_submission.sh";
+my $scriptclusterrun="$outputfolder/chipseq-process_cluster_submission.sh";
+
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
@@ -201,8 +257,8 @@ elsif($tx=~/Mouse.B38/) {
 #Process
 ########
 
-print STDERR "\nsbptools chipseq-processs running ...\n\n" if $verbose;
-print LOG "\nsbptools chipseq-processs running ...\n\n";
+print STDERR "\nsbptools chipseq-processs $version running ...\n\n" if $verbose;
+print LOG "\nsbptools chipseq-processs $version running ...\n\n";
 
 
 
@@ -489,7 +545,7 @@ if(defined $configattrs{"FASTQ2"}) {
 		my $samplefolder="$outputfolder/$sample/";
 
 		#need to move to samplefolder, because star will genearte temp files 
-		$sample2workflow{$sample}.="cd $samplefolder;$star --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
+		$sample2workflow{$sample}.="cd $samplefolder;$star --runThreadN $ncpus --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
 	}
 }
 else {
@@ -502,7 +558,7 @@ else {
 	foreach my $sample (sort keys %sample2fastq) {
 		my $samplefolder="$outputfolder/$sample/";
 				
-		$sample2workflow{$sample}.="$star --runThreadN $core --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[1]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
+		$sample2workflow{$sample}.="$star --runThreadN $ncpus --genomeDir ".$tx2ref{$tx}{"star"}." --readFilesIn ".$sample2fastq{$sample}[1]." --outSAMtype BAM SortedByCoordinate --readFilesCommand zcat --outFileNamePrefix $samplefolder/$sample\_;";
 	}
 }
 
@@ -603,56 +659,89 @@ close S2;
 #Run mode
 #######
 
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+open(SOUT,">$scriptclusterrun") || die "ERROR:can't write to $scriptclusterrun. $!";
 
+
+my @scripts_all=($scriptfile1,$scriptfile2);
+
+
+#print out command for local and cluster parallel runs
 my $jobnumber=0;
 my $jobname="chipseq-process-$timestamp";
 
-if($jobs eq "auto") {
+if($task eq "auto") {
 	$jobnumber=0;
 }
 else {
-	$jobnumber=$jobs;
+	$jobnumber=$task;
 }
 
+my @local_runs;
+my @script_names;
 
+foreach my $script (@scripts_all) {
+	push @local_runs,"cat $script | parallel -j $jobnumber";
 
-my $localcommand;
-
-
-if(defined $configattrs{"INPUT"} && defined $configattrs{"CHIPPEDSAMPLE"}) {
-	$localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;cat $scriptfile2 | parallel -j $jobnumber;\"";
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
 }
-else {
-	$localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;cat $scriptfile1 | parallel -j $jobnumber;\"";
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env -r ";
+
+if(defined $mem && length($mem)>0) {
+	$clustercommand.=" -m $mem";	
 }
+
+print SOUT $clustercommand,"\n";
+close SOUT;
+
 
 
 if($runmode eq "none") {
-	print STDERR "\nTo run locally, in shell type: $localcommand\n\n";
-	print LOG "\nTo run locally, in shell type: $localcommand\n\n";
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
 }
 elsif($runmode eq "local") {
 	#local mode
+	#implemented for Falco
 	
-	#need to replace with "sbptools queuejob" later
-
-	system($localcommand);
-	print LOG "$localcommand;\n\n";
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
 
 	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
 	
 }
-elsif($runmode eq "server") {
-	#server mode
+elsif($runmode eq "cluster") {
+	#cluster mode
+	#implement for Firefly
 	
-	#implement for firefly later
+	system("sh $scriptclusterrun");
+	print LOG "sh $scriptclusterrun;\n\n";
+
+	print STDERR "Starting cluster paralleled processing using $jobnumber tasks. To monitor process, use \"qstat\".\n\n";
+
 }
 
-
-
-
 close LOG;
+
+
+
+
+
+
 ########
 #Functions
 ########
@@ -692,6 +781,43 @@ sub build_timestamp {
 	}
 	
 	return $now;
+}
+
+
+sub get_parent_folder {
+	my $dir=shift @_;
+	
+	if($dir=~/^(.+\/)[^\/]+\/?/) {
+		return $1;
+	}
+}
+
+
+
+sub find_program {
+	my $fullprogram=shift @_;
+	
+	#use defined program as default, otherwise search for this program in PATH
+	
+	my $program;
+	if($fullprogram=~/([^\/]+)$/) {
+		$program=$1;
+	}
+	
+	if(-e $fullprogram) {
+		return $fullprogram;
+	}
+	else {
+		my $sysout=`$program`;
+		if($sysout) {
+			my $location=`which $program`;
+			return $location;
+		}
+		else {
+			print STDERR "ERROR:$fullprogram or $program not found in your system.\n\n";
+			exit;
+		}
+	}
 }
 
 
