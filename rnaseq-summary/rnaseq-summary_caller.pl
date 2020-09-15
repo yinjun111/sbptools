@@ -27,6 +27,7 @@ my $version="0.62";
 #v0.6, gsea-gen/summary and rnaseq-motif/summary will be ran by parallel-job 
 #v0.61, versioning
 #v0.62, DE folder signature changed
+#v0.63, Add note to summary file
 
 my $usage="
 
@@ -160,6 +161,9 @@ my $gsea_gen_summary="perl $sbptoolsfolder/gsea-gen-summary/gsea-gen-summary.pl"
 my $rnaseq_motif="perl $sbptoolsfolder/rnaseq-motif/rnaseq-motif_caller.pl".scalar(add_dev($dev));
 my $rnaseq_motif_summary="perl $sbptoolsfolder/rnaseq-motif-summary/rnaseq-motif-summary.pl";
 my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl"; 
+
+my $rnaseqsummarynote="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_note.txt";
+
 
 ########
 #Code begins
@@ -835,7 +839,7 @@ system("$mergefiles -m $outputfolder/gene.results.merged.tpm.groupavg.sel.txt -i
 
 my $timestamp=substr($now,0,10);
 
-system("$text2excel -i $outputfolder/rnaseq-summary_GeneDEMerged_anno.txt,$outputfolder/rnaseq-summary_GeneDESigs_anno.txt,$outputfolder/gene.results.merged.fpkm.groupavg.sel_anno.txt,$outputfolder/gene.results.merged.tpm.groupavg.sel_anno.txt -n GeneDE,GeneDESigs,FPKM_Group,TPM_Group -o $outputfolder/rnaseq-summary_all_$timestamp.xlsx --theme theme2");
+system("$text2excel -i $rnaseqsummarynote,$outputfolder/rnaseq-summary_GeneDEMerged_anno.txt,$outputfolder/rnaseq-summary_GeneDESigs_anno.txt,$outputfolder/gene.results.merged.fpkm.groupavg.sel_anno.txt,$outputfolder/gene.results.merged.tpm.groupavg.sel_anno.txt -n Note,GeneDE,GeneDESigs,FPKM_Group,TPM_Group -o $outputfolder/rnaseq-summary_all_$timestamp.xlsx --theme theme2");
 
 print STDERR "\nResults summary is in $outputfolder/rnaseq-summary_all_$timestamp.xlsx.\n";
 

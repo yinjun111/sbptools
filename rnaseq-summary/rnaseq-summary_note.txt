@@ -1,0 +1,30 @@
+Name	Description
+	
+Data sheets	
+GeneDE	Gene Differential Expression (DE) results for all the comparisons, along with gene annotation
+GeneDESigs	Gene Differential Expression (DE) results by only showing DE marks, 1 as significantly up-regulated, -1 as significantly down-regulated, 0 as not significantly changed, NA as not conforming to statistical assumption by Cook's distance and failed independent filtering by DESeq2, space as not tested due to too low gene expression.
+FPKM_Group	Average Fragments per Kilobase per Million Reads (FPKM) for each group
+TPM_Group	Average Transcripts per Million (TPM) for each group
+	
+	
+GeneDE Column Header	
+Gene	Gene ID
+log2 fold change (MLE): Group1 vs Group2	Log2 Fold Change for Group1 vs Group2 calculated by DESeq2 (used for significance test)
+DESeq2 Stat:Mean,SE,Wald stat	DESeq2 raw statistics
+Wald test p-value: Group Group1 vs Group2	DESeq2 raw p value
+BH adjusted p-values	BH adjusted p-values correcting for multiple testing errors (used for significance test)
+Significance: Log2FC 1 BHP 0.05	Significance based on Log2 transformed FC >= defined cutoff or <=  -defined cutoff, AND BH adjusted p-value < defined cutoff
+log2 fold change (MLE): Group3 vs Group4	Another comparison (if any)
+DESeq2 Stat:Mean,SE,Wald stat	
+Wald test p-value: Group3 vs Group4	
+BH adjusted p-values	
+Significance: Log2FC 1 BHP 0.05	
+gene_name	Gene Symbol
+Description	
+gene_biotype	
+transcript_id	
+strand	
+chromosome	
+start	
+end	
+% GC content	

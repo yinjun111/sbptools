@@ -8,7 +8,8 @@ version="0.4"
 #0.23, add write_table_proper
 #0.3, add MA plot,fixed xlim for volcano plot
 #0.31, add plotting option
-#0.4 add new volcano plot and gene annotation. --anno and --config are used
+#0.4 add new volcano plot and gene annotation. --anno and --config are used. --anno is different from previous argument
+#0.41, changed title for Significance 
 
 description=paste0("de_test\nversion ",version,"\n","Usage:\nDescription: Differential Expression calculation using DESeq2\n")
 
@@ -30,7 +31,7 @@ parser <- add_argument(parser, arg="--fccutoff", type="float", help = "Log2 FC c
 parser <- add_argument(parser, arg="--qcutoff", type="float", help = "qcutoff",default=0.05)
 parser <- add_argument(parser, arg="--pmethod",type="character", help = "Method used in DESeq2",default="Wald")
 parser <- add_argument(parser, arg="--qmethod",type="character", help = "FDR Method",default="BH")
-parser <- add_argument(parser, arg="--filter",type="float", help = "Count filter for all the exps",default="10")
+parser <- add_argument(parser, arg="--filter",type="float", help = "Count filter for all the exps. Default as mininum of (No. of samples) x 5 counts",default="auto")
 parser <- add_argument(parser, arg="--independentfiltering",type="logical", help = "DESeq2 independentFiltering",default=T)
 parser <- add_argument(parser, arg="--cookscutoff",type="logical", help = "DESeq2 cooksCutoff",default=T)
 parser <- add_argument(parser, arg="--plot",type="logical", help = "Whether to generate volcano and MA plots",default=T)
@@ -122,7 +123,7 @@ deseq2_test <- function(mat,anno,design,fc_cutoff=1,q_cutoff=0.05,pmethod="Wald"
 
 	mat.result<-cbind(fc,stat,p,q,sig)
 	
-	colnames(mat.result)<-c(values(res)[[2]][2],"DESeq2 Stat:Mean,SE,Wald stat",values(res)[[2]][5],values(res)[[2]][6],paste("Significance: Log2FC ",round(fc_cutoff,3)," ",qmethod, "P ",q_cutoff,sep=""))
+	colnames(mat.result)<-c(values(res)[[2]][2],"DESeq2 Stat:Mean,SE,Wald stat",values(res)[[2]][5],values(res)[[2]][6],paste("Significance: Abs(Log2FC)>=",round(fc_cutoff,3)," ",qmethod, "P<",q_cutoff,sep=""))
 	
 	
 	
@@ -236,6 +237,8 @@ enhanced_volcano_plot <- function(gene, fc, q, sig, labels = NULL,
   }
   
   # Create a named vector of custom colors
+  sig[is.na(sig)]=0
+  
   col_scheme <- c("Up"=upcol, "Down"=downcol, "N.S."="grey")
   cols <- rep(col_scheme['N.S.'], length(gene))
   cols[sig == 1] <- col_scheme['Up']
@@ -267,7 +270,7 @@ enhanced_volcano_plot <- function(gene, fc, q, sig, labels = NULL,
                          ylim = c(0, max_pval), xlim = c(min_fc, max_fc),
                          axisLabSize = 12, captionLabSize = 12, 
                          xlab = xlab, ylab = ylab, title = "", 
-                         caption = paste0('Total = ', nrow(df), ' genes'),
+                         caption = paste0('Total = ', nrow(df), ' features'),
                          typeConnectors = "closed", legendIconSize = 2,
                          selectLab = labels, borderWidth = 1.5
                          )
@@ -437,7 +440,7 @@ if(args$plot) {
 
 	CairoPNG(filename = vp_outfile_png,res = 300,width=2500, height=2200)
 
-	enhanced_volcano_plot(gene=anno.sel,fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10 ",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Log2FC ",round(args$fccutoff,2)," ",args$qmethod, "P ",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
+	enhanced_volcano_plot(gene=anno.sel,fc=data.sel.result$result[,1],q=data.sel.result$result[,4],sig=data.sel.result$result[,5],xlab=colnames(data.sel.result$result)[1],ylab=paste("-Log10 ",colnames(data.sel.result$result)[4],sep=""),main=paste("Volcano Plot ","Significance: Abs(Log2FC)>=",round(args$fccutoff,2)," ",args$qmethod, "P<",args$qcutoff,sep=""),q_cutoff=args$qcutoff,fc_cutoff = args$fccutoff)
 
 	dev.off()
 
