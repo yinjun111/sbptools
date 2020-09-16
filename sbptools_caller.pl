@@ -38,6 +38,11 @@ Parameters:
     rnaseq-motif-summary  RNA-seq TFBS motif finding results summary	
     motif-finder      Transcription factor binding motif prediction
 	
+    chipseq-process   ChIP-seq QC, Align, and Peak Calling
+    chipseq-merge     Summarize ChIP-Seq results
+    chipseq-de        Perform DE analysis for ChIP-Seq
+    chipseq-summary   Summarize ChIP-seq DE results
+
     mergefiles        Use a model file to merge different files together
     text2excel        Build excel file using text file (by Andrew Hodges)
 
@@ -51,14 +56,8 @@ Parameters:
     ########
     #Supported only in Falco
     ########	
-
-    chipseq-process   ChIP-seq QC, Align, and Peak Calling
-    chipseq-merge     Summarize ChIP-Seq results
-    chipseq-de        Perform DE analysis for ChIP-Seq
-    chipseq-summary   Summarize ChIP-seq DE results
 	
     bs-fastq          Download and merge FASTQ files from Basespace	
-
     ensembl2ucsc      Convert Ensembl gtf/fasta/bed into UCSC format
 
 
