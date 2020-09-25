@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.51";
+my $version="0.52";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -23,6 +23,7 @@ my $version="0.51";
 #v0.41 option to turn off bamcoverage due to long processing time. changed cutadapt logging
 #v0.5 change alignment procedure to be compatible with more programs. bamcoverage changed.
 #v0.51, support different versions
+#v0.52, correct bamcoverage bug
 
 my $usage="
 
@@ -98,7 +99,7 @@ GetOptions(
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
-	"bamcoverage" => \$runbamcoverage,	
+	"bamcoverage=s" => \$runbamcoverage,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		

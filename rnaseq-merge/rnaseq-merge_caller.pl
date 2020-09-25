@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.41";
+my $version="0.42";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
@@ -20,7 +20,7 @@ my $version="0.41";
 #v0.32, add CPM
 #v0.4, major updates, to add parallel job, and --dev option
 #v0.41, versioning
-
+#v0.42, process multiqc
 
 my $usage="
 
@@ -128,19 +128,15 @@ else {
 	$sbptoolsfolder=get_parent_folder(abs_path(dirname($0)));
 }
 
-
-my $multiqc="/apps/python-3.5.2/bin/multiqc";
-
 my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 my $rnaseqmergefilter="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_filter.R";
 my $count2cpm="$sbptoolsfolder/rnaseq-merge/count2cpm.R";
-
-
+my $process_multiqc="$sbptoolsfolder/rnaseq-merge/process_multiqc_summary.pl";
 
 #used programs
-
-my $Rscript=find_program("/apps/R-3.5.2/bin/Rscript");
+my $multiqc=find_program("/apps/python-3.5.2/bin/multiqc");
+my $Rscript=find_program("/apps/R-4.0.2/bin/Rscript");
 
 
 
@@ -277,6 +273,8 @@ if(defined $samples && length($samples)>0) {
 }
 elsif(defined $configfile && length($configfile)>0) {
 	#another way of getting samples
+	
+	$configfile=abs_path($configfile);
 	
 	open(IN,$configfile) || die "Error reading $configfile. $!";
 	#first column should be sample, with a header
@@ -437,7 +435,7 @@ foreach my $sample (@samples_array) {
 }
 close OUT;
 
-print S1 "$multiqc -l $tempfolder/samplefolders.txt -o $outputfolder/multiqc;\n";
+print S1 "$multiqc -l $tempfolder/samplefolders.txt -o $outputfolder/multiqc;$process_multiqc -i $outputfolder/multiqc/multiqc_data/multiqc_general_stats.txt -o $outputfolder/multiqc/multiqc_data/multiqc_general_stats_rev.txt -c $configfile\n";
 
 #------------------
 #may need to implement annotation ...

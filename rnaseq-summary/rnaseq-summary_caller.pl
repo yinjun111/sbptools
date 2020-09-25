@@ -165,6 +165,9 @@ my $parallel_job="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 my $rnaseqsummarynote="$sbptoolsfolder/rnaseq-summary/rnaseq-summary_note.txt";
 
 
+my $zip=find_program("/usr/local/bin/zip");
+
+
 ########
 #Code begins
 ########
@@ -747,7 +750,7 @@ system("cat ".join(" ",@gseascripts)." > $outputfolder/forGSEA/run_gsea_1.sh");
 
 #script for gsea-gen-summary and zip the folder
 open(OUT,">$outputfolder/forGSEA/run_gsea_2.sh") || die $!;
-print OUT "$gsea_gen_summary -i $outputfolder/forGSEA/ -o $outputfolder/forGSEA/GSEASummary;cd $outputfolder/;zip -r GSEA.zip forGSEA/\n";
+print OUT "$gsea_gen_summary -i $outputfolder/forGSEA/ -o $outputfolder/forGSEA/GSEASummary;cd $outputfolder/;$zip -r GSEA.zip forGSEA/\n";
 close OUT;
 
 my $gseaclustercommand="$parallel_job -i $outputfolder/forGSEA/run_gsea_1.sh,$outputfolder/forGSEA/run_gsea_2.sh -o $outputfolder/forGSEA/ -n run_gsea_1,run_gsea_2 --tandem -r";

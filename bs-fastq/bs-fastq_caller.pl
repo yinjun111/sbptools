@@ -19,10 +19,12 @@ my $basemount="/usr/local/bin/basemount";
 ########
 
 
-my $version="0.2a";
+my $version="0.3";
 
 #v0.2 adding function to merge fastq files by R1, R2
 #v0.2a add basemount-cmd refresh function
+#v0.3, update local run option
+
 
 my $usage="
 
@@ -30,20 +32,20 @@ bs-fastq
 version: $version
 Usage: sbptools bs-fastq -p projectname -f basemount_folder -o outputfolder
 
-Description: Copy Fastq files from basemount project folder
+Description: Copy Fastq files from basemount project folder. This command only works in Falco.
 
 Parameters:
 
     --folder|-f       Basemount folder name
     --project|-p      Project name
     --sample|-s       Sample name(s) (optional)
-    --out|-o          output file
+    --out|-o          Output folder
 
     --merge|-m        Whether to merge fastq files from each folder by R1/R2 [T]
     --config|-c       Config file, tab delimited file Folder,Project,Sample (optional)
 
 	
-    --runmode|-r      Where to run the scripts, local, server or none [none]
+    --runmode|-r      Where to run the scripts, local or none [none]
     --verbose|-v      Verbose
 	
 	
@@ -71,7 +73,10 @@ my $outputfolder;
 my $merge="T";
 my $runmode="none";
 
+my $task=1; #only works by one process
+
 my $verbose=1;
+my $dev=0; #currently no use now
 
 GetOptions(
 	"folder|f=s" => \$folder,
@@ -80,9 +85,10 @@ GetOptions(
 	"out|o=s" => \$outputfolder,
 	"config|c=s" => \$config,
 	"merge|m=s" => \$merge,
-	"runmode|r" => \$runmode,
+	"runmode|r=s" => \$runmode,
 	
 	"verbose|v" => \$verbose,
+	"dev" => \$dev,
 );
 
 
@@ -104,12 +110,16 @@ if($merge eq "T") {
 
 
 my $logfile="$outputfolder/bs-fastq_run.log";
-my $scriptfile="$outputfolder/bs-fastq_run.sh";
+my $scriptfile1="$outputfolder/bs-fastq_run.sh";
+
+my $scriptlocalrun="$outputfolder/bs-fastq_local_submission.sh";
 
 #write log file
 open(LOG, ">$logfile") || die "Error writing into $logfile. $!";
 
 my $now=current_time();
+my $timestamp=build_timestamp($now,"long");
+
 
 print LOG "perl $0 $params\n\n";
 print LOG "Start time: $now\n\n";
@@ -120,6 +130,10 @@ print LOG "$basemount version:", getsysoutput("$basemount -V"),"\n";
 ########
 #Progress
 ########
+
+print STDERR "\nsbptools bs-fastq $version running ...\n\n" if $verbose;
+print LOG "\nsbptools bs-fastq $version running ...\n\n";
+
 
 #refresh basemount
 
@@ -232,7 +246,7 @@ foreach my $f (sort keys %samplelist) {
 #output command
 
 
-open(OUT,">$scriptfile") || die $!;
+open(OUT,">$scriptfile1") || die $!;
 
 foreach my $f (sort keys %samplelist) {
 	foreach my $p (sort keys %{$samplelist{$f}}) {
@@ -293,23 +307,78 @@ foreach my $f (sort keys %samplelist) {
 close OUT;
 
 
-########
-#Execuate
-########
 
-#local mode
-print STDERR "\nTo run locally, in shell type: sh $scriptfile\n\n";
-print LOG "\nTo run locally, in shell type: sh $scriptfile\n\n";
 
-if($runmode eq "local") {
-	print STDERR "Running locally...\n" if $verbose;
-	print LOG "Running locally...\n";
-	system("sh $scriptfile");
-	print STDERR "Done\n\n" if $verbose;
-	print LOG "Done\n\n";
+#######
+#Run mode
+#######
+
+open(LOUT,">$scriptlocalrun") || die "ERROR:can't write to $scriptlocalrun. $!";
+
+my @scripts_all=($scriptfile1);
+
+
+#print out command for local and cluster parallel runs
+my $jobnumber=0;
+my $jobname="bs-fastq-$timestamp";
+
+if($task eq "auto") {
+	$jobnumber=0;
+}
+else {
+	$jobnumber=$task;
+}
+
+my @local_runs;
+my @script_names;
+
+foreach my $script (@scripts_all) {
+	#push @local_runs,"cat $script | parallel -j $jobnumber";
+	push @local_runs,"sh $script"; #no parallel allowed
+	
+	if($script=~/([^\/]+)\.\w+$/) {
+		push @script_names,$1;
+	}
+}
+
+my $localcommand="screen -S $jobname -dm bash -c \"source ~/.bashrc;".join(";",@local_runs).";\"";
+
+print LOUT $localcommand,"\n";
+close LOUT;
+
+#print out command for cluster parallel runs
+
+#my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env"; #changed here for none version
+
+#if(defined $mem && length($mem)>0) {
+#	$clustercommand.=" -m $mem";	
+#}
+
+#print SOUT "sh $outputfolder/scripts/parallel-job_submit.sh\n"; #submit step
+#close SOUT;
+
+
+if($runmode eq "none") {
+	print STDERR "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	#print STDERR "To run in cluster, in shell type: sh $scriptclusterrun\n";
+	
+	print LOG "\nTo run locally, in shell type: sh $scriptlocalrun\n";
+	#print LOG "To run in cluster, in shell type: sh $scriptclusterrun\n";
+}
+elsif($runmode eq "local") {
+	#local mode
+	#implemented for Falco
+	
+	system("sh $scriptlocalrun");
+	print LOG "sh $scriptlocalrun;\n\n";
+
+	print STDERR "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	print LOG "Starting local paralleled processing using $jobnumber tasks. To monitor process, use \"screen -r $jobname\".\n\n";
+	
 }
 
 close LOG;
+
 		
 
 
@@ -330,3 +399,17 @@ sub getsysoutput {
 	return $output;
 }
 
+
+sub build_timestamp {
+	my ($now,$opt)=@_;
+	
+	if($opt eq "long") {
+		$now=~tr/ /_/;
+		$now=~tr/://d;
+	}
+	else {
+		$now=substr($now,0,10);
+	}
+	
+	return $now;
+}
