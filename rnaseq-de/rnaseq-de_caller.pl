@@ -11,7 +11,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.6";
+my $version="0.61";
 
 #version 0.2a, add r version log
 #v0.3 add runmode
@@ -20,6 +20,8 @@ my $version="0.6";
 #v0.5, use R 4.0.2, add comparison argument for multiple comparisons
 #v0.51, versioning
 #v0.6, major updates planned for R4.0, comparisons of multiple groups. turn off txde
+#v0.61, adding -s for --comparisons
+
 
 my $usage="
 
@@ -47,7 +49,7 @@ Mandatory Parameters:
                           the last factor of the formula is used for comparison
 
     #if you have multiple comparisons to perform in a project
-    --comparisons     Tab delimited file with first column as treatment groups
+    --comparisons|-s  Tab delimited file with first column as treatment groups
                         and second column as reference groups for multiple pairwise comparisons
 
     #if you only have one comparison
@@ -153,7 +155,7 @@ GetOptions(
 	"out|o=s" => \$outputfolder,
 	"formula|f=s" => \$formula,
 	
-	"comparisons=s" => \$comparisons,
+	"comparisons|s=s" => \$comparisons,
 	"treatment=s" => \$treatment,
 	"reference=s" => \$reference,
 	
