@@ -15,7 +15,7 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.62";
+my $version="0.64";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
@@ -28,6 +28,7 @@ my $version="0.62";
 #v0.61, versioning
 #v0.62, DE folder signature changed
 #v0.63, Add note to summary file
+#v0.64, Rename duplicated folder names
 
 my $usage="
 
@@ -292,7 +293,8 @@ print LOG "\nsbptools rnaseq-summary $version running ...\n\n";
 my %folder2genede;
 my %folder2txde;
 my %folder2dir;
-my %comparisons;
+#my %comparisons;
+my %folder2comparison;
 
 foreach my $inputfolder (split(",",$inputfolders)) {
 	#print STDERR $inputfolder,"#1\n";
@@ -307,12 +309,23 @@ foreach my $inputfolder (split(",",$inputfolders)) {
 				
 				#foldername needs to be unique
 				if(defined $folder2dir{$foldername}) {
-					print STDERR "ERROR:$foldername has been used twice:\n",abs_path($folder),"\n",$folder2dir{$foldername},"\n\n";
-					print LOG "ERROR:$foldername has been used twice:\n",abs_path($folder),"\n",$folder2dir{$foldername},"\n\n";
-					exit;
+					print STDERR "ERROR:$foldername has been used twice:\n",abs_path($folder),"\n",$folder2dir{$foldername},"\n";
+					print LOG "ERROR:$foldername has been used twice:\n",abs_path($folder),"\n",$folder2dir{$foldername},"\n";
+					
+					#rename folder name for duplicated foldernames
+					my @dirs=split("\/",abs_path($folder));
+					
+					my $newfoldername= $dirs[$#dirs-1]."-".$dirs[$#dirs];
+
+					print STDERR "Rename $foldername into $newfoldername.\n";
+					print LOG "Rename $foldername into $newfoldername.\n";
+					
+					$foldername=$newfoldername;
+					#exit;
 				}
 
-				$comparisons{$foldername}++;
+				#$comparisons{$foldername}++;  #if the folder name is changed, the comparisons wont be recognized by GSEA
+				$folder2comparison{$foldername}=basename($folder); #to prevent inconsistent comaprison name by foldername change
 				
 				$folder2dir{$foldername}=abs_path($folder);
 				my @files=map {basename($_)} glob("$folder/*");
@@ -709,7 +722,11 @@ my @gseascripts;
 
 #open(OUT,">$gsea_gen_run") || die "ERROR:Can't write into $gsea_gen_run.$!\n\n";
 
-foreach my $comparison (sort keys %comparisons) {
+#foreach my $comparison (sort keys %comparisons) {
+
+#if the DEs are from different mergred folders, the following commands won't work
+foreach my $foldername (sort keys %folder2comparison) {
+	my $comparison=$folder2comparison{$foldername};
 	if($comparison=~/(.+)_vs_(.+)/) {
 		print STDERR "Comparison:$comparison recognized. Perform GSEA analysis.\n";
 		print LOG "Comparison:$comparison recognized. Perform GSEA analysis.\n";
