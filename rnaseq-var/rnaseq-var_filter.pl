@@ -22,9 +22,11 @@ use File::Basename qw(basename);
 ########
 
 
-my $version="0.2";
+my $version="0.3";
 
 #0.2, add FILTER tag
+#0.21, change dp to <, not <=. Same as VariantFiltration
+#0.3, add AF filter
 
 my $usage="
 
@@ -38,7 +40,8 @@ Parameters:
     --in|-i           Input file, a vcf file
     --out|-o          Output file, a filtered vcf file
     --com|-c          Common SNP vcf
-    --dp|-d           DP filter
+    --dp|-d           DP filter, recommended 5
+    --af|-a           AF filter, recommended 0.05
     --filter|-f       Only retain SNPs by PASS tag [PASS]
 	
 ";
@@ -61,6 +64,7 @@ my $infile;
 my $outfile;
 my $commonsnp;
 my $dp;
+my $af;
 my $filter="PASS";
 
 my $runmode=0;
@@ -72,6 +76,7 @@ GetOptions(
 	"out|o=s" => \$outfile,
 	"com|c=s" => \$commonsnp,
 	"dp|d=s" => \$dp,
+	"af|a=s" => \$af,
 	"filter|f=s" => \$filter,
 
 	"verbose" => \$verbose,
@@ -113,9 +118,11 @@ open(IN,$infile) || die $!;
 open(OUT,">$outfile") || die $!;
 
 my $anum=0;#all snps
-my $cnum=0;#common snps
-my $dnum=0;#dp snps
-my $fnum=0;#filtered snps
+#my $cnum=0;#common snps
+#my $dnum=0;#dp snps
+#my $fnum=0;#filtered snps
+
+my %filternums;
 
 my $finalnum=0; #all the filtered snps
 
@@ -133,20 +140,23 @@ while(<IN>) {
 		
 		#filter common snp
 		if(defined $commonsnps{$snpname}) {
-			$cnum++;
+			#$cnum++;			
+			$filternums{"CommonSNP"}++;		
 			next;
 		}
 		
 		
 		#filter existing DP
 		if( (!defined $dp || length($dp)==0) && $array[6] =~/DP/) {
-			$dnum++;
+			#$dnum++;
+			$filternums{"DP"}++;		
 			next;
 		}
 		
 		#filter by FILTER column
 		unless(defined $filters{$array[6]}) {
-			$fnum++;
+			#$fnum++;
+			$filternums{"GATK-Filter:".$filter}++;		
 			next;
 		}
 		
@@ -154,10 +164,28 @@ while(<IN>) {
 		#use new dp filter
 		if(defined $dp && length($dp)>0) {
 			if($array[7]=~/DP=(\d+)/) {
-				if($1<=$dp) {
-					$dnum++;
+				if($1<$dp) {
+					#0.21, change dp to <, not <=. Same as VariantFiltration
+					#$dnum++;
+					$filternums{"DP<".$dp}++;		
 					next;
 				}
+			}
+		}
+
+		#use af filter
+		my @cates=split(":",$array[8]);
+		my @vals=split(":",$array[9]);
+		my %cate2val;
+		
+		for(my $num=0;$num<@cates;$num++) {
+			$cate2val{$cates[$num]}=$vals[$num];
+		}
+		
+		if(defined $af && length($af)>0) {
+			if($cate2val{"AF"}<$af) {
+				$filternums{"AF<".$af}++;		
+				next;
 			}
 		}
 		
@@ -170,4 +198,9 @@ while(<IN>) {
 close IN;
 close OUT;
 
-print STDERR "$anum SNPs are processed using rnaseq-var_filter.\n$cnum SNPs are filtered by matching common SNPs.\n$dnum SNPs are filtered by matching DP filter.\n$fnum SNPs are filtered by matching FILTER $filter tag.\n$finalnum SNPs passed all the filters.\n\n";
+#print STDERR "$anum SNPs are processed using rnaseq-var_filter.\n$cnum SNPs are filtered by matching common SNPs.\n$dnum SNPs are filtered by matching DP filter.\n$fnum SNPs are filtered by matching FILTER $filter tag.\n$finalnum SNPs passed all the filters.\n\n";
+
+print STDERR "$anum SNPs are processed using rnaseq-var_filter.\n";
+print STDERR "Variants filtered:\n";
+print STDERR join("\n",map {$_."\t".$filternums{$_}} sort keys %filternums),"\n\n";
+print STDERR "$finalnum SNPs passed all the filters.\n\n";
