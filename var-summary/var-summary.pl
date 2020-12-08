@@ -104,12 +104,6 @@ print LOG "Current version: $version\n\n";
 
 
 
-#output files
-
-my $snpeff_nofilter_summary="$outputfolder/var-summary_filtered.snpEff_summary.genes_merged.txt";
-my $snpeff_filtered_summary="$outputfolder/var-summary_filtered-cleaned.snpEff_summary.genes_merged.txt";
-
-
 ######
 #Process input file
 ######
@@ -124,11 +118,11 @@ print LOG "Summarizing snpEff summary files:\n";
 
 #
 my %cate2col=qw(variants_impact_HIGH 4 variants_impact_LOW 5 variants_impact_MODERATE 6 variants_impact_MODIFIER 7);
-
+my %samples;
 
 #infiles,outfile,category
-process_snpeff_gene_summary("$inputfolder/*/snpanno/*filtered.snpEff_summary.genes.txt",$snpeff_nofilter_summary,$cate);
-process_snpeff_gene_summary("$inputfolder/*/snpanno/*filtered-cleaned.snpEff_summary.genes.txt",$snpeff_filtered_summary,$cate);
+process_snpeff_gene_summary("$inputfolder/*/snpanno/*filtered.snpEff_summary.genes.txt","$outputfolder/var-summary_filtered.snpEff_summary.genes_merged.txt",$cate);
+process_snpeff_gene_summary("$inputfolder/*/snpanno/*filtered-cleaned.snpEff_summary.genes.txt","$outputfolder/var-summary_filtered-cleaned.snpEff_summary.genes_merged.txt",$cate);
 
 
 ####
@@ -192,7 +186,7 @@ sub process_snpeff_gene_summary {
 	my @snpeff_infiles=glob($infiles);
 
 	my %sample2snp;
-	my %samples;
+	
 	my %genes;
 
 	foreach my $file (@snpeff_infiles) {
@@ -222,10 +216,10 @@ sub process_snpeff_gene_summary {
 		close IN;
 	}
 
-	print STDERR "Writing $snpeff_summary\n";
-	print LOG "Writing $snpeff_summary\n";
+	print STDERR "Writing $resultfile\n";
+	print LOG "Writing $resultfile\n";
 
-	open(OUT,">$snpeff_summary") || die $!;
+	open(OUT,">$resultfile") || die $!;
 	print OUT "Gene\t",join("\t",sort keys %samples),"\n";
 
 	foreach my $gene (sort keys %genes) {
@@ -253,7 +247,7 @@ sub process_snpeff_gene_summary {
 
 sub process_snpeff_gtnr {
 	
-	my ($infiles,$outfile_prefix);
+	my ($infiles,$outfile_prefix)=@_;
 	
 	
 	#genotype

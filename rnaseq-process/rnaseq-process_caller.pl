@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.52";
+my $version="0.53";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -24,6 +24,7 @@ my $version="0.52";
 #v0.5 change alignment procedure to be compatible with more programs. bamcoverage changed.
 #v0.51, support different versions
 #v0.52, correct bamcoverage bug
+#v0.53, rm temporary files. only keep genome bam
 
 my $usage="
 
@@ -249,6 +250,8 @@ my %sample2fastq;
 my %sample2indexname;
 my %configattrs;
 
+my %tempfiles2rm;
+
 my $fileline=0;
 my $newconfigfiletitle;
 open(IN,$configfile) || die "Error reading $configfile. $!";
@@ -412,6 +415,8 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim 1>>$cutadaptlog;";
 		
+		$tempfiles2rm{$sample}{$fastq1trim}++;
+		$tempfiles2rm{$sample}{$fastq2trim}++;
 		
 	}
 }
@@ -439,7 +444,8 @@ else {
 		#$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 | $cutadapt -j 4 -a \"A{100}\" - | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim >> $cutadaptlog 2>&1;";
 		
 		$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 2>>$cutadaptlog | $cutadapt -j 4 -a \"A{100}\" - 2>>$cutadaptlog | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim 1>>$cutadaptlog;";
-
+		
+		$tempfiles2rm{$sample}{$fastq1trim}++;
 	}
 }
 		
@@ -493,12 +499,15 @@ if(defined $configattrs{"FASTQ2"}) {
 		#STAR alignment
 		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." > $starlog 2>&1;";
 		
+		$tempfiles2rm{$sample}{ "$samplefolder/$sample\_Aligned.toTranscriptome.out.bam"}++;
+		
 		#bam index
 		$sample2workflow{$sample}.="$samtools index $samplefolder/$sample\_Aligned.sortedByCoord.out.bam;";
 		
 		#RSEM 
 		$sample2workflow{$sample}.="$rsem -p 4 --paired-end --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
 		
+		$tempfiles2rm{$sample}{"$samplefolder/$sample.transcript.bam"}++;
 		
 		if($runbamcoverage eq "T") {
 			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.sortedByCoord.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.sortedByCoord.out.bw;";
@@ -520,12 +529,16 @@ else {
 		
 		#STAR alignment
 		$sample2workflow{$sample}.="$star --genomeDir ".$tx2ref{$tx}{"star"}."  --outSAMunmapped Within  --outReadsUnmapped Fastx --outFilterType BySJout  --outSAMattributes NH HI AS NM MD  --outFilterMultimapNmax 20  --outFilterMismatchNmax 999  --outFilterMismatchNoverLmax 0.04  --alignIntronMin 20  --alignIntronMax 1000000  --alignMatesGapMax 1000000  --alignSJoverhangMin 8  --alignSJDBoverhangMin 1  --sjdbScore 1  --runThreadN 4  --genomeLoad NoSharedMemory  --outSAMtype BAM SortedByCoordinate  --quantMode TranscriptomeSAM  --outSAMheaderHD \@HD VN:1.4 SO:coordinate  --outFileNamePrefix $samplefolder/$sample\_  --readFilesCommand zcat  --readFilesIn ".$sample2fastq{$sample}[1]." > $starlog 2>&1;";
+		
+		$tempfiles2rm{$sample}{ "$samplefolder/$sample\_Aligned.toTranscriptome.out.bam"}++;
 
 		#bam index
 		$sample2workflow{$sample}.="$samtools index $samplefolder/$sample\_Aligned.sortedByCoord.out.bam;";
 		
 		#RSEM process alignment
 		$sample2workflow{$sample}.="$rsem -p 4 --bam $samplefolder/$sample\_Aligned.toTranscriptome.out.bam ".$tx2ref{$tx}{"rsem"}." $samplefolder/$sample > $rsemlog 2>&1;";
+		
+		$tempfiles2rm{$sample}{"$samplefolder/$sample.transcript.bam"}++;
 		
 		if($runbamcoverage eq "T") {
 			$sample2workflow{$sample}.="$bamcoverage --numberOfProcessors 4 --bam $samplefolder/$sample\_Aligned.sortedByCoord.out.bam --normalizeUsing CPM --binSize 5 -o $samplefolder/$sample\_Aligned.sortedByCoord.out.bw;";
@@ -543,7 +556,10 @@ else {
 open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 
 foreach my $sample (sort keys %sample2workflow) {
-	print S1 $sample2workflow{$sample},"\n";
+	print S1 $sample2workflow{$sample};
+	
+	#rm temporary files
+	print S1 "rm ",join(" ",sort keys %{$tempfiles2rm{$sample}}),";\n";
 }
 
 close S1;

@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.42";
+my $version="0.5";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
@@ -21,6 +21,8 @@ my $version="0.42";
 #v0.4, major updates, to add parallel job, and --dev option
 #v0.41, versioning
 #v0.42, process multiqc
+#v0.5, add expr-qc
+
 
 my $usage="
 
@@ -133,6 +135,7 @@ my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 my $rnaseqmergefilter="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_filter.R";
 my $count2cpm="$sbptoolsfolder/rnaseq-merge/count2cpm.R";
 my $process_multiqc="$sbptoolsfolder/rnaseq-merge/process_multiqc_summary.pl";
+my $expr_qc="$sbptoolsfolder/expr-qc/expr-qc.R";
 
 #used programs
 my $multiqc=find_program("/apps/python-3.5.2/bin/multiqc");
@@ -505,11 +508,19 @@ print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$genecountmerged --f
 
 my $genecountmerged_filtered="gene.results.merged.count.filtered.$filter.txt";
 my $genecpmmerged_filtered="gene.results.merged.cpm.filtered.$filter.txt";
+my $genetpmmerged_filtered="gene.results.merged.tpm.filtered.$filter.txt";
 
 print S2 "$Rscript $count2cpm --count $outputfolder/$genecountmerged_filtered --cpm $outputfolder/$genecpmmerged_filtered;";
+
+
+#Expr-qc #still have problem for group name assignment
+
+print S2 "$Rscript $expr_qc --input $outputfolder/$genetpmmerged_filtered --config $configfile --geneanno $outputfolder/geneanno.txt --out $outputfolder/expr-qc;";
+
 print S2 "\n";
 
-#tx
+
+#tx filter
 print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
 
 my $txcountmerged_filtered="tx.results.merged.count.filtered.$filter.txt";
@@ -517,11 +528,10 @@ my $txcpmmerged_filtered="tx.results.merged.cpm.filtered.$filter.txt";
 
 print S2 "$Rscript $count2cpm --count $outputfolder/$txcountmerged_filtered --cpm $outputfolder/$txcpmmerged_filtered;";
 
+
 print S2 "\n";
 
 close S2;
-
-
 
 
 #######

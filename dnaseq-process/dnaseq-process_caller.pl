@@ -12,7 +12,9 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.1";
+my $version="0.11";
+
+#v0.11, fix file removing bugs
 
 my $usage="
 
@@ -36,8 +38,9 @@ Parameters:
     --tx|-t           Transcriptome [Human.B38.Ensembl84]
                         Currently only support Human.B38.Ensembl84
 
-    --dp|-d           Sequencing coverage, DP, filter [5]
-
+    --dp|-d           Sequencing coverage, DP, filter >= [5]
+    --af|-a           Allele Frequency, AF, filter >= [0.05]
+	
     --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
     --ncpus           No. of cpus for each task [8]
     --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
@@ -75,6 +78,7 @@ my $outputfolder;
 my $verbose=1;
 my $tx="Human.B38.Ensembl84";
 my $dpfilter=5;
+my $affilter=0.05;
 my $task;
 my $ncpus=8;
 my $runbamcoverage="F";
@@ -90,6 +94,7 @@ GetOptions(
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
 	"dp|d=s" => \$dpfilter,	
+	"af|a=s" => \$affilter,		
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
@@ -216,6 +221,7 @@ my %tx2ref=(
 		"geneanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_gene_annocombo_rev.txt",
 		"txanno"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc_tx_annocombo.txt",
 		"gnomad_common001"=>"/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common001_refchrs.vcf.gz",
+		"gnomad_common1e4"=>"/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common1e4_refchrs.vcf.gz",
 		"knownsnp"=>"/data/jyin/Databases/SNP/00-All.vcf.gz",
 		"genomeversion"=>"hg38",
 	}
@@ -427,6 +433,9 @@ foreach my $sample (sort keys %sample2fastq) {
 		#------------------
 		$sample2workflow{$sample}.="$java -jar $trimmomatic PE ".$sample2fastq{$sample}[0]." ".$sample2fastq{$sample}[1]." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[4]." ".$sample2fastq{$sample}[3]." ".$sample2fastq{$sample}[5]." ILLUMINACLIP:/apps/Trimmomatic-0.38/adapters/TruSeq3-PE-2.fa:2:30:10 > $outputfolder/$sample/alignment/trimmomatic.log 2>&1;";
 		
+		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/*.fastq.gz"}++;
+		
+		
 		#Fastqc
 		#------------------
 		$sample2workflow{$sample}.="$fastqc --nogroup -o $outputfolder/$sample/alignment/ -f fastq ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3].";";
@@ -436,7 +445,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		$sample2workflow{$sample}.="$java -Xmx8G -jar $picard FastqToSam  FASTQ=".$sample2fastq{$sample}[2]." FASTQ2=".$sample2fastq{$sample}[3]." OUTPUT=$outputfolder/$sample/alignment/$sample\_fastq2bam.bam  READ_GROUP_NAME=ReadGroupName SAMPLE_NAME=$sample LIBRARY_NAME=LibraryName PLATFORM=illumina > $outputfolder/$sample/alignment/FastqToSam.log 2>&1;";
 
 		#temp file: $outputfolder/$sample/$sample\_fastq2bam.bam
-		$tempfiles2rm{$sample}{$sample}{"$outputfolder/$sample/alignment/$sample\_fastq2bam.bam"}++;
+		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/$sample\_fastq2bam.bam"}++;
 
 
 		#BWA alignment and convert to bam
@@ -444,7 +453,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		$sample2workflow{$sample}.="$bwa mem -v 3 -t $ncpus -Y ".$tx2ref{$tx}{"fasta"}." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." 2> $outputfolder/$sample/alignment/bwa.log | $samtools view -1 - > $outputfolder/$sample/alignment/$sample\_unmerged.bam;";
 		
 		#temp file $outputfolder/$sample/$sample\_unmerged.bam
-		$tempfiles2rm{$sample}{$sample}{"$outputfolder/$sample/alignment/$sample\_unmerged.bam"}++;
+		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/$sample\_unmerged.bam"}++;
 		
 		$bwacommand="$bwa mem -v 3 -t $ncpus -Y ".$tx2ref{$tx}{"fasta"}." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3];
 	}
@@ -481,7 +490,7 @@ foreach my $sample (sort keys %sample2fastq) {
 
 	#BaseRecalibrator
 	#------------------
-	$sample2workflow{$sample}.="$gatk --java-options \"-Xms4g\" BaseRecalibrator -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.sorted.bam --use-original-qualities -O $outputfolder/$sample/gatk4/recal_data.csv --known-sites ".$tx2ref{$tx}{"gnomad_common001"}." > $outputfolder/$sample/gatk4/BaseRecalibrator.log 2>&1;";
+	$sample2workflow{$sample}.="$gatk --java-options \"-Xms4g\" BaseRecalibrator -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.sorted.bam --use-original-qualities -O $outputfolder/$sample/gatk4/recal_data.csv --known-sites ".$tx2ref{$tx}{"gnomad_common1e4"}." > $outputfolder/$sample/gatk4/BaseRecalibrator.log 2>&1;";
 	
 	#Apply BQSR
 	#------------------
@@ -514,12 +523,12 @@ else {
 		#Mutect2
 		#------------------
 		#for tumor only
-		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" Mutect2 -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -O $outputfolder/$sample/gatk4/$sample.vcf.gz --germline-resource ".$tx2ref{$tx}{"gnomad_common001"}." --f1r2-tar-gz $outputfolder/$sample/gatk4/f1r2.tar.gz > $outputfolder/$sample/gatk4/Mutect2.log 2>&1;";
+		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" Mutect2 -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -O $outputfolder/$sample/gatk4/$sample.vcf.gz --germline-resource ".$tx2ref{$tx}{"gnomad_common1e4"}." --f1r2-tar-gz $outputfolder/$sample/gatk4/f1r2.tar.gz > $outputfolder/$sample/gatk4/Mutect2.log 2>&1;";
 		
 		#GetPileupSummaries #variants for contamination/common snp needed
 		#------------------
 		
-		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" GetPileupSummaries -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -V ".$tx2ref{$tx}{"gnomad_common001"}." -L ".$tx2ref{$tx}{"gnomad_common001"}." -O $outputfolder/$sample/gatk4/tumor-pileups.table > $outputfolder/$sample/gatk4/GetPileupSummaries.log 2>&1;";
+		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" GetPileupSummaries -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -V ".$tx2ref{$tx}{"gnomad_common1e4"}." -L ".$tx2ref{$tx}{"gnomad_common1e4"}." -O $outputfolder/$sample/gatk4/tumor-pileups.table > $outputfolder/$sample/gatk4/GetPileupSummaries.log 2>&1;";
 
 		
 		#Learn Read Orientation Model
@@ -551,7 +560,7 @@ else {
 		#Manual filter, because SNPeff doesn't differentiate filtered/unfiltered
 		#filter by common snp, 
 		#------------------
-		$sample2workflow2{$sample}.="perl $rnaseq_var_filter -i $outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf -d $dpfilter -c ".substr($tx2ref{$tx}{"gnomad_common001"},0,length($tx2ref{$tx}{"gnomad_common001"})-3)." -o $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf 2> $outputfolder/$sample/snpanno/var_filter.log;";
+		$sample2workflow2{$sample}.="perl $rnaseq_var_filter -i $outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf -d $dpfilter -a $affilter -c ".substr($tx2ref{$tx}{"gnomad_common1e4"},0,length($tx2ref{$tx}{"gnomad_common1e4"})-3)." -o $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf 2> $outputfolder/$sample/snpanno/var_filter.log;";
 		
 		$tempfiles2rm{$sample}{"$outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf"}++;
 		

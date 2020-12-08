@@ -15,7 +15,7 @@ use List::Util qw(sum);
 ########
 
 
-my $version="0.64";
+my $version="0.65";
 
 #v0.1b, changed DE match pattern
 #v0.1c, add first line recognition in DE results
@@ -28,7 +28,8 @@ my $version="0.64";
 #v0.61, versioning
 #v0.62, DE folder signature changed
 #v0.63, Add note to summary file
-#v0.64, Rename duplicated folder names
+#v0.64, Rename duplicated folder names. Known issue, for DEs using different merging folders, GSEA doesn't work well
+#v0.65, add -m for --rnaseq-merge
 
 my $usage="
 
@@ -54,7 +55,7 @@ Parameters:
                            first column as sample name.
     --group|-g        Group name in config file for avg calculation
 
-    --rnaseq-merge    rnaseq-merge folder to retrieve TPM/FPKM data
+    --rnaseq-merge|-m rnaseq-merge folder to retrieve TPM/FPKM data
 
     --gi              use selected gene list to summarize results	
     --ti              use selected tx list to summarize results
@@ -121,7 +122,7 @@ GetOptions(
 	"config|c=s" => \$configfile,
 
 	"group|g=s" => \$group,
-	"rnaseq-merge=s" => \$rnaseqmerge,
+	"rnaseq-merge|m=s" => \$rnaseqmerge,
 	
 	"fccutoff=s" => \$fccutoff,
 	"qcutoff=s" => \$qcutoff,
