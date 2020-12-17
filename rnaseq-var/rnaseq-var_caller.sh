@@ -5,7 +5,7 @@
 #SBP Bioinformatics Core
 #######
 
-version="2.0"
+version="2.1"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
@@ -15,7 +15,7 @@ version="2.0"
 #v1.41 fix samtools bug
 #v1.5 start from bam file
 #v2, add gnomad common SNP filter and DP filter
-
+#v2.1, add TMB summary. New snpeff. Remove more files
 
 #######
 #Usage
@@ -201,8 +201,8 @@ star=/apps/STAR-master/bin/Linux_x86_64/STAR
 gatk3folder=/apps/GenomeAnalysisTK-3.8-1-0-gf15c1c3ef
 bgzip=/apps/htslib-1.9/bgzip
 tabix=/apps/htslib-1.9/tabix
-snpeff=/apps/snpEff/snpEff.jar
-snpsift=/apps/snpEff/SnpSift.jar
+snpeff=/apps/snpEff-5/snpEff.jar
+snpsift=/apps/snpEff-5/SnpSift.jar
 reformatsnpeffvcf=/apps/sbptools/rnaseq-var/reformat_snpeff_vcf.pl
 samtools=/apps/bin/samtools
 rnaseq_var_filter=/apps/sbptools/rnaseq-var/rnaseq-var_filter.pl
@@ -415,19 +415,19 @@ if [ "$species" == "human" ]
 then
 	if [ "$dryrun" == "F" ];then
 		#human
-		perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -c $gnomadcommonsnp -o $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf 2>> $logfile
+		perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -c $gnomadcommonsnp -o $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf 2>> $logfile
 	fi
 	
-	printf "perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -c $gnomadcommonsnp -o $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf 2>> $logfile" | tee -a  $runfile
+	printf "perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -c $gnomadcommonsnp -o $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf 2>> $logfile" | tee -a  $runfile
 	
 else
 	
 	if [ "$dryrun" == "F" ];then
 		#mouse
-		perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf 2>> $logfile
+		perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf 2>> $logfile
 	fi
 	
-	printf "perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf 2>> $logfile" | tee -a  $runfile
+	printf "perl $rnaseq_var_filter -i $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf 2>> $logfile" | tee -a  $runfile
 fi
 
 
@@ -450,20 +450,20 @@ if [ "$dryrun" == "F" ];then
 	mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html
 
 	#reformat snpeff ANN column
-	perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt
+	perl $reformatsnpeffvcf -i $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt
 
 
 	####
 	#after filter
 	####
-	eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_afterfiltered_summary.html > $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.vcf 2>> $logfile
+	eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_filtered-cleaned_summary.html > $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf 2>> $logfile
 
 	#rename
-	mv $outfolder/snpanno/snpEff_afterfiltered_summary.genes.txt $outfolder/snpanno/${filename}snpEff_afterfiltered_summary.genes.txt
-	mv $outfolder/snpanno/snpEff_afterfiltered_summary.html $outfolder/snpanno/${filename}snpEff_afterfiltered_summary.html
+	mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.genes.txt $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.genes.txt
+	mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.html $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.html
 
 	#reformat snpeff ANN column
-	perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.edited.txt
+	perl $reformatsnpeffvcf -i $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.edited.txt
 
 	
 fi
@@ -472,7 +472,7 @@ printf "#unfiltered SNPs\n";
 printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf 2>> $logfile;mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${filename}snpEff_summary.genes.txt;mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
 
 printf "#filtered SNPs\n";
-printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.afterfiltered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_afterfiltered_summary.html > $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.vcf;	mv $outfolder/snpanno/snpEff_afterfiltered_summary.genes.txt $outfolder/snpanno/${filename}snpEff_afterfiltered_summary.genes.txt;mv $outfolder/snpanno/snpEff_afterfiltered_summary.html $outfolder/snpanno/${filename}snpEff_afterfiltered_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.afterfiltered.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
+printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_filtered-cleaned_summary.html > $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf;	mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.genes.txt $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.genes.txt;mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.html $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
 
 
 ######
@@ -489,6 +489,10 @@ then
 		rm $outfolder/alignment/*/*.sam
 		rm $outfolder/alignment/2pass_genomeDir/SA*
 		rm $outfolder/alignment/2pass_genomeDir/Genome
+		
+		rm $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam
+		rm $outfolder/gatk3/${filename}Aligned.out_dedupped.bam
+		
 	fi
 	
 	printf "rm $outfolder/alignment/*/*.sam;rm $outfolder/alignment/2pass_genomeDir/SA*;rm $outfolder/alignment/2pass_genomeDir/Genome\n" | tee -a  $runfile

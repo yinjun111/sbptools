@@ -1,0 +1,61 @@
+Seq. Ontology	Classic	Note & Example	Impact	TMB1 (Foundation)	TMB2 (Missense)	TMB3 (Protein Changing)
+conserved_intergenic_variant	INTERGENIC_CONSERVED	The variant is in a highly conserved intergenic region	MODIFIER	N	N	N
+conserved_intron_variant	INTRON_CONSERVED	The variant is in a highly conserved intronic region	MODIFIER	N	N	N
+downstream_gene_variant	DOWNSTREAM	Downstream of a gene (default length: 5K bases)	MODIFIER	N	N	N
+intergenic_region	INTERGENIC	The variant is in an intergenic region	MODIFIER	N	N	N
+intragenic_variant	INTRAGENIC	"The variant hits a gene, but no transcripts within the gene"	MODIFIER	N	N	N
+intron_variant	INTRON	"Variant hits and intron. Technically, hits no exon in the transcript."	MODIFIER	N	N	N
+regulatory_region_variant	REGULATION	The variant hits a known regulatory feature (non-coding).	MODIFIER	N	N	N
+upstream_gene_variant	UPSTREAM	Upstream of a gene (default length: 5K bases)	MODIFIER	N	N	N
+3_prime_UTR_truncation + exon_loss	UTR_3_DELETED	The variant deletes an exon which is in the 3'UTR of the transcript	MODERATE	Y	N	Y
+3_prime_UTR_variant	UTR_3_PRIME	Variant hits 3'UTR region	MODIFIER	Y	N	N
+5_prime_UTR_premature_				Y	N	Y
+5_prime_UTR_truncation + exon_loss_variant	UTR_5_DELETED	The variant deletes an exon which is in the 5'UTR of the transcript	MODERATE	Y	N	Y
+5_prime_UTR_variant	UTR_5_PRIME	Variant hits 5'UTR region	MODIFIER	Y	N	N
+bidirectional_gene_fusion	GENE_FUSION_REVERSE	Fusion of two genes in opposite directions.	HIGH	Y	N	Y
+chromosome	CHROMOSOME_LARGE DELETION	A large parte (over 1%) of the chromosome was deleted.	HIGH	Y	N	Y
+coding_sequence_variant	CDS	The variant hits a CDS.	MODIFIER	Y	N	Y
+coding_sequence_variant	CODON_CHANGE	One or many codons are changed e.g.: An MNP of size multiple of 3	LOW	Y	N	Y
+disruptive_inframe_deletion	CODON_CHANGE_PLUS CODON_DELETION	"One codon is changed and one or more codons are deleted e.g.: A deletion of size multiple of three, not at codon boundary"	MODERATE	Y	N	Y
+disruptive_inframe_insertion	CODON_CHANGE_PLUS CODON_INSERTION	"One codon is changed and one or many codons are inserted e.g.: An insert of size multiple of three, not at codon boundary"	MODERATE	Y	N	Y
+duplication	CHROMOSOME_LARGE_DUPLICATION	"Duplication of a large chromosome segment (over 1% or 1,000,000 bases)"	HIGH	Y	N	Y
+duplication	EXON_DUPLICATION	Duplication of an exon.	HIGH	Y	N	Y
+duplication	EXON_DUPLICATION_PARTIAL	Duplication affecting part of an exon.	HIGH	Y	N	Y
+duplication	GENE_DUPLICATION	Duplication of a gene.	MODIFIER	Y	N	Y
+exon_loss_variant	EXON_DELETED	A deletion removes the whole exon.	HIGH	Y	N	Y
+exon_loss_variant	EXON_DELETED_PARTIAL	Deletion affecting part of an exon.	HIGH	Y	N	Y
+exon_variant	EXON	The variant hits an exon (from a non-coding transcript) or a retained intron.	MODIFIER	Y	N	Y
+feature_ablation	GENE_DELETED	Deletion of a gene.	HIGH	Y	N	Y
+feature_ablation	TRANSCRIPT_DELETED	Deletion of a transcript.	HIGH	Y	N	Y
+frameshift_variant	FRAME_SHIFT	Insertion or deletion causes a frame shift e.g.: An indel size is not multple of 3	HIGH	Y	N	Y
+gene_fusion	GENE_FUSION	Fusion of two genes.	HIGH	Y	N	Y
+gene_fusion	GENE_FUSION_HALF	Fusion of one gene and an intergenic region.	HIGH	Y	N	Y
+gene_variant	GENE	The variant hits a gene.	MODIFIER	Y	N	Y
+inframe_deletion	CODON_DELETION	One or many codons are deleted e.g.: A deletion multiple of three at codon boundary	MODERATE	Y	N	Y
+inframe_insertion	CODON_INSERTION	One or many codons are inserted e.g.: An insert multiple of three in a codon boundary	MODERATE	Y	N	Y
+initiator_codon_variant	NON_SYNONYMOUS_START	"Variant causes start codon to be mutated into another start codon (the new codon produces a different AA). e.g.: Atg/Ctg, M/L (ATG and CTG can be START codons)"	LOW	Y	N	Y
+inversion	CHROMOSOME_LARGE_INVERSION	"Inversion of a large chromosome segment (over 1% or 1,000,000 bases)."	HIGH	Y	N	Y
+inversion	EXON_INVERSION	Inversion of an exon.	HIGH	Y	N	Y
+inversion	EXON_INVERSION_PARTIAL	Inversion affecting part of an exon.	HIGH	Y	N	Y
+miRNA	MICRO_RNA	Variant affects an miRNA	MODIFIER	Y	N	Y
+missense_variant	NON_SYNONYMOUS_CODING	"Variant causes a codon that produces a different amino acid e.g.: Tgg/Cgg, W/R"	MODERATE	Y	Y	Y
+protein_protein_contact	PROTEIN_PROTEIN_INTERACTION_LOCUS	Protein-Protein interaction loci.	HIGH	Y	N	Y
+rare_amino_acid_variant	RARE_AMINO_ACID	The variant hits a rare amino acid thus is likely to produce protein loss of function	HIGH	Y	N	Y
+rearranged_at_DNA_level	GENE_REARRANGEMENT	Rearrangement affecting one or more genes.	HIGH	Y	N	Y
+sequence_feature + exon_loss_variant	NEXT_PROT	"A 'NextProt' based annotation. Details are provided in the 'feature type' sub-field (ANN), or in the effect details (EFF)."	MODERATE	Y	N	Y
+splice_acceptor_variant	SPLICE_SITE_ACCEPTOR	"The variant hits a splice acceptor site (defined as two bases before exon start, except for the first exon)."	HIGH	Y	N	Y
+splice_donor_variant	SPLICE_SITE_DONOR	"The variant hits a Splice donor site (defined as two bases after coding exon end, except for the last exon)."	HIGH	Y	N	Y
+splice_region_variant	SPLICE_SITE_REGION	"A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron."	LOW	Y	N	Y
+splice_region_variant	SPLICE_SITE_BRANCH	"A varaint affective putative (Lariat) branch point, located in the intron."	LOW	Y	N	Y
+splice_region_variant	SPLICE_SITE_BRANCH_U12	"A varaint affective putative (Lariat) branch point from U12 splicing machinery, located in the intron."	MODERATE	Y	N	Y
+start_codon_gain_variant	START_GAINED	A variant in 5'UTR region produces a three base sequence that can be a START codon.	LOW	Y	N	Y
+start_lost	START_LOST	"Variant causes start codon to be mutated into a non-start codon. e.g.: aTg/aGg, M/R"	HIGH	Y	N	Y
+start_retained	SYNONYMOUS_START	"Variant causes start codon to be mutated into another start codon. e.g.: Ttg/Ctg, L/L (TTG and CTG can be START codons)"	LOW	Y	N	Y
+stop_gained	STOP_GAINED	"Variant causes a STOP codon e.g.: Cag/Tag, Q/*"	HIGH	Y	N	Y
+stop_lost	STOP_LOST	"Variant causes stop codon to be mutated into a non-stop codon e.g.: Tga/Cga, */R"	HIGH	Y	N	Y
+stop_retained_variant	NON_SYNONYMOUS_STOP	"Variant causes stop codon to be mutated into another stop codon (the new codon produces a different AA). e.g.: Atg/Ctg, M/L (ATG and CTG can be START codons)"	LOW	Y	N	Y
+stop_retained_variant	SYNONYMOUS_STOP	"Variant causes stop codon to be mutated into another stop codon. e.g.: taA/taG, */*"	LOW	Y	N	Y
+structural_interaction_variant	PROTEIN_STRUCTURAL_INTERACTION_LOCUS	"Within protein interacion loci (e.g. two AA that are in contact within the same protein, prossibly helping structural conformation)."	HIGH	Y	N	Y
+synonymous_variant	SYNONYMOUS_CODING	"Variant causes a codon that produces the same amino acid e.g.: Ttg/Ctg, L/L"	LOW	Y	N	N
+transcript_variant	TRANSCRIPT	The variant hits a transcript.	MODIFIER	Y	N	Y
+non_coding_transcript_exon_variant		Found in Snpeff result		Y	N	Y

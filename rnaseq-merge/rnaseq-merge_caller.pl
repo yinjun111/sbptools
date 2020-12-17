@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.5";
+my $version="0.51";
 
 #v0.2, add filter function to get files for PCA
 #v0.3, removed -v, add -r implementation for local
@@ -22,7 +22,7 @@ my $version="0.5";
 #v0.41, versioning
 #v0.42, process multiqc
 #v0.5, add expr-qc
-
+#v0.51, --group for expr-qc
 
 my $usage="
 
@@ -45,6 +45,9 @@ Parameters:
 
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
+
+    --group|-g        Group name in config file for expr-qc plots [Group]
+
     --anno|-a         Add annotation
 
     --filter          Signal filter [auto]
@@ -85,6 +88,7 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
+my $group="Group";
 my $task=7;
 my $ncpus=2;
 my $mem;
@@ -98,6 +102,7 @@ GetOptions(
 	"samples|s=s" => \$samples,	
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
+	"group|g=s" => \$group,
 	"tx|t=s" => \$tx,	
 	"filter=s" => \$filter,
 	"task=s" => \$task,
@@ -513,15 +518,15 @@ my $genetpmmerged_filtered="gene.results.merged.tpm.filtered.$filter.txt";
 print S2 "$Rscript $count2cpm --count $outputfolder/$genecountmerged_filtered --cpm $outputfolder/$genecpmmerged_filtered;";
 
 
-#Expr-qc #still have problem for group name assignment
+#Expr-qc
 
-print S2 "$Rscript $expr_qc --input $outputfolder/$genetpmmerged_filtered --config $configfile --geneanno $outputfolder/geneanno.txt --out $outputfolder/expr-qc;";
+print S2 "$Rscript $expr_qc --input $outputfolder/$genetpmmerged_filtered --config $configfile --geneanno $outputfolder/geneanno.txt --out $outputfolder/expr-qc --group $group;";
 
 print S2 "\n";
 
 
 #tx filter
-print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;\n";
+print S2 "$Rscript $rnaseqmergefilter --count $outputfolder/$txcountmerged --fpkm $outputfolder/$txfpkmmerged --tpm $outputfolder/$txtpmmerged --filter $filter;";
 
 my $txcountmerged_filtered="tx.results.merged.count.filtered.$filter.txt";
 my $txcpmmerged_filtered="tx.results.merged.cpm.filtered.$filter.txt";

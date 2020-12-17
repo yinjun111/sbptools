@@ -12,9 +12,10 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.11";
+my $version="0.12";
 
 #v0.11, fix file removing bugs
+#v0.12, add TMB summary
 
 my $usage="
 
@@ -572,7 +573,7 @@ else {
 		$sample2workflow2{$sample}.="mv $outputfolder/$sample/snpanno/snpEff_summary.genes.txt $outputfolder/$sample/snpanno/$sample.filtered-cleaned.snpEff_summary.genes.txt;";
 		
 		#reformat snpeff ANN column
-		$sample2workflow2{$sample}.="perl $reformatsnpeffvcf $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.snpeff.sift.annotated.vcf $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.snpeff.sift.annotated.edited.txt;";
+		$sample2workflow2{$sample}.="perl $reformatsnpeffvcf -i $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.snpeff.sift.annotated.vcf -o $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.snpeff.sift.annotated.edited.txt;";
 
 		
 		#before filtered
@@ -582,7 +583,7 @@ else {
 		$sample2workflow2{$sample}.="mv $outputfolder/$sample/snpanno/snpEff_summary.genes.txt $outputfolder/$sample/snpanno/$sample.filtered.snpEff_summary.genes.txt;";
 		
 		#reformat snpeff ANN column
-		$sample2workflow2{$sample}.="perl $reformatsnpeffvcf $outputfolder/$sample/snpanno/${sample}.filtered.snpeff.sift.annotated.vcf $outputfolder/$sample/snpanno/${sample}.filtered.snpeff.sift.annotated.edited.txt;";
+		$sample2workflow2{$sample}.="perl $reformatsnpeffvcf -i $outputfolder/$sample/snpanno/${sample}.filtered.snpeff.sift.annotated.vcf -o $outputfolder/$sample/snpanno/${sample}.filtered.snpeff.sift.annotated.edited.txt;";
 		
 		
 		#Remove temporary files
