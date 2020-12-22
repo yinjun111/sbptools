@@ -4,7 +4,7 @@ use Getopt::Long;
 use File::Basename;
 use Cwd qw(abs_path);
 
-my $version="0.6";
+my $version="0.62";
 
 #v0.3, runmode implementations in rnaseq and chipseq
 #v0.31, add rnaseq-motif
@@ -14,7 +14,8 @@ my $version="0.6";
 #v0.51, update rnaseq-var to v2
 #v0.52, start to support different sbptools versions
 #v0.6, major updates planned for R4.0, chipseq Firefly compatibility, Ensembl v100, de novo assembler, git compatibility
-
+#v0.61, add geo-download
+#v0.62, add dnaseq-process, rnaseq-var improved
 
 my $usage="
 
@@ -43,10 +44,12 @@ Parameters:
     chipseq-de        Perform DE analysis for ChIP-Seq
     chipseq-summary   Summarize ChIP-seq DE results
 
+    dnaseq-process    DNA-Seq (Exome/Genome-Seq) processing based on GATK4
+
     mergefiles        Use a model file to merge different files together
     text2excel        Build excel file using text file (by Andrew Hodges)
 
-    gsea-gen          Generate files ready for GSEA analysis (by Andrew Hodges)
+    gsea-gen          Generate files ready for GSEA analysis
 
     ########
     #Supported only in Firefly
@@ -59,7 +62,7 @@ Parameters:
 	
     bs-fastq          Download and merge FASTQ files from Basespace	
     ensembl2ucsc      Convert Ensembl gtf/fasta/bed into UCSC format
-
+    geo-download      Download raw FASTQ files from GEO
 
 ";
 
@@ -105,6 +108,7 @@ else {
 
 
 my $bs_fastq="$sbptoolsfolder/bs-fastq/bs-fastq_caller.pl";
+my $geo_download="$sbptoolsfolder/geo-download/geo-download_caller.pl";
 
 my $rnaseq_process="$sbptoolsfolder/rnaseq-process/rnaseq-process_caller.pl";
 my $rnaseq_merge="$sbptoolsfolder/rnaseq-merge/rnaseq-merge_caller.pl";
@@ -123,6 +127,8 @@ my $chipseq_merge="$sbptoolsfolder/chipseq-merge/chipseq-merge_caller.pl";
 my $chipseq_de="$sbptoolsfolder/chipseq-de/chipseq-de_caller.pl";
 my $chipseq_summary="$sbptoolsfolder/chipseq-summary/chipseq-summary_caller.pl";
 
+my $dnaseq_process="$sbptoolsfolder/dnaseq-process/dnaseq-process_caller.pl";
+
 my $motif_finder="$sbptoolsfolder/motif-finder/motif-finder_caller.pl";
 
 my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
@@ -132,6 +138,7 @@ my $parallel_job ="perl $sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 
 my %commands2program=(
     "bs-fastq"=>$bs_fastq,
+	"geo-download"=>$geo_download,
 	
     "rnaseq-process"=>$rnaseq_process,
     "rnaseq-merge"=>$rnaseq_merge,
@@ -148,6 +155,8 @@ my %commands2program=(
     "chipseq-merge"=>$chipseq_merge,
     "chipseq-de"=>$chipseq_de,
 	"chipseq-summary"=>$chipseq_summary,	
+
+    "dnaseq-process"=>$dnaseq_process,
 
 	"motif-finder"=>$motif_finder,
     

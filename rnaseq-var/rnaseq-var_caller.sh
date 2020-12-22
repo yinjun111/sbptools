@@ -5,7 +5,7 @@
 #SBP Bioinformatics Core
 #######
 
-version="2.1"
+version="3.0"
 
 #version 1.1 add option to control params
 #version 1.2 add reformating snpeff and rename snpEff_summary.genes
@@ -16,6 +16,8 @@ version="2.1"
 #v1.5 start from bam file
 #v2, add gnomad common SNP filter and DP filter
 #v2.1, add TMB summary. New snpeff. Remove more files
+#v2.2, Remove files at earlier points
+#v3.0, Support PE
 
 #######
 #Usage
@@ -32,11 +34,10 @@ Usage: sbptools rnaseq-var -i yourfastq.fastq.gz -o outputfolder -s species
 
 Description: RNA-Seq variant calling pipeline built using GATK3. This pipeline is customized to call and annotate variants from RNA-Seq data for human/mouse using B38 annotation. You only need to provde fastq file and an output folder.
 
-Currently SE sequencing only
-
 Parameters:
 
 	-i      Input fastq file, fastq file name must end with fastq.gz
+	-r      PE reverse fastq file, fastq file name must end with fastq.gz	
 	-b      Start from bam files instead of fastq.
 	-o      Output folder
 	-s      Species, human or mouse
@@ -46,7 +47,7 @@ Parameters:
 	Optional
 	-d      Whethter to dedup [T]
 	-f      DP filter [5.0]
-	-c      gnomad v2 common SNP filter 0.01 or 0.05 [0.01]	
+	-c      gnomad v2 common SNP filter 0.01 or 0.0001 [0.0001]	
 	-k      Keep alignment data [F]
 	
 "
@@ -83,12 +84,17 @@ keepalignment=F
 dryrun=F
 
 #receive options
-while getopts "i:b:o:s:d:f:y:" opt; do
+while getopts "i:r:b:o:s:d:f:y:" opt; do
   case ${opt} in
     i )
 		fastqfile=$(realpath $OPTARG)
 		filename=$(basename $fastqfile)
 		filename=${filename/.fastq.gz/}
+      ;;
+    r )
+		fastqfiler=$(realpath $OPTARG)
+		#filename=$(basename $fastqfile)
+		#filename=${filename/.fastq.gz/}
       ;;
     b )
 		bamfile=$(realpath $OPTARG)
@@ -171,11 +177,11 @@ then
 	genomefasta=/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.dna.primary_assembly_ucsc.fa
 	knownsnp=/data/jyin/Databases/SNP/00-All.vcf.gz
 	
-	if [ "$csfilter" == "0.01" ]
+	if [ "$csfilter" == "0.0001" ]
 	then
-		gnomadcommonsnp=/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common001.vcf
+		gnomadcommonsnp=/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common1e4_refchrs.vcf		
 	else
-		gnomadcommonsnp=/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common005.vcf
+		gnomadcommonsnp=/data/jyin/Databases/gnomad/fromGATK4/af-only-gnomad.hg38.common001_refchrs.vcf
 	fi
 	
 else
@@ -233,11 +239,25 @@ if [ -f "$fastqfile" ];then
 
 	if [ "$dryrun" == "F" ];then
 		mkdir -p $outfolder/alignment/1pass_alignment
-		
-		$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1
+				
 	fi
-	
-	printf "mkdir -p $outfolder/alignment/1pass_alignment;$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1\n" | tee -a $runfile
+
+	#PE or SE
+	if [ -n "$fastqfiler" ];then
+		if [ "$dryrun" == "F" ];then
+			$star --genomeDir $genomedir --readFilesIn $fastqfile $fastqfiler --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1
+		fi
+		
+		printf "mkdir -p $outfolder/alignment/1pass_alignment;$star --genomeDir $genomedir --readFilesIn $fastqfile $fastqfiler --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1\n" | tee -a $runfile
+
+	else		
+		if [ "$dryrun" == "F" ];then
+			$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1
+		fi
+		
+		printf "mkdir -p $outfolder/alignment/1pass_alignment;$star --genomeDir $genomedir --readFilesIn $fastqfile --outSAMtype BAM Unsorted --readFilesCommand 'gunzip -c' --outFileNamePrefix $outfolder/alignment/1pass_alignment/$filename >> $logfile 2>&1\n" | tee -a $runfile
+
+	fi
 	
 
 	#2-pass #need to use a different alignment output folder ...
@@ -265,9 +285,6 @@ else
 	printf "#No Fastq file is defined. Skip STAR alignment.\n" | tee -a $logfile $runfile
 fi
 
-
-#need to add this 
-#samtools view -Sb DKO1_Normal.Aligned.out.sam > DKO1_Normal.Aligned.out.bam
 
 ######
 #Step 2
@@ -299,6 +316,21 @@ else
 	
 fi
 
+#remove temporary files
+if [ -f "$fastqfile" ];then
+	if [ "$dryrun" == "F" ];then
+		rm $outfolder/alignment/*/*.sam
+		rm $outfolder/alignment/*/*.bam
+		rm $outfolder/alignment/2pass_genomeDir/SA*
+		rm $outfolder/alignment/2pass_genomeDir/Genome
+	fi
+	printf "\n#Remove temporary files.\n\nrm $outfolder/alignment/*/*.sam;$outfolder/alignment/*/*.bam;rm $outfolder/alignment/2pass_genomeDir/SA*;rm $outfolder/alignment/2pass_genomeDir/Genome;\n" | tee -a  $runfile
+
+fi
+
+
+
+#Mark duplicates
 
 if [ "$dedup" == "T" ]
 then
@@ -361,6 +393,18 @@ if [ "$dryrun" == "F" ];then
 fi
 
 printf "eval $java -jar $gatk3folder/GenomeAnalysisTK.jar -T HaplotypeCaller -R $genomefasta -I $outfolder/gatk3/${filename}Aligned.out_split.bam -dontUseSoftClippedBases -stand_call_conf 20.0 -o $outfolder/gatk3/${filename}output.vcf --use_jdk_deflater --use_jdk_inflater >> $logfile 2>&1\n" | tee -a  $runfile
+
+
+
+#remove temporary files
+
+if [ "$dryrun" == "F" ];then
+		rm $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam
+		rm $outfolder/gatk3/${filename}Aligned.out_dedupped.bam
+fi
+
+printf "\n#Remove temporary files.\n\nrm $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam;rm $outfolder/gatk3/${filename}Aligned.out_dedupped.bam;\n" | tee -a  $runfile
+
 
 
 #######
@@ -469,35 +513,11 @@ if [ "$dryrun" == "F" ];then
 fi
 
 printf "#unfiltered SNPs\n";
-printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf 2>> $logfile;mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${filename}snpEff_summary.genes.txt;mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
+printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_summary.html > $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf 2>> $logfile;mv $outfolder/snpanno/snpEff_summary.genes.txt $outfolder/snpanno/${filename}snpEff_summary.genes.txt;mv $outfolder/snpanno/snpEff_summary.html $outfolder/snpanno/${filename}snpEff_summary.html;perl $reformatsnpeffvcf -i $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
 
 printf "#filtered SNPs\n";
-printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_filtered-cleaned_summary.html > $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf;	mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.genes.txt $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.genes.txt;mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.html $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.html;perl $reformatsnpeffvcf $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
+printf "eval $java -jar $snpeff -v $genomeversion $outfolder/snpanno/${filename}output.filtered-cleaned.sift.annotated.vcf -stats $outfolder/snpanno/snpEff_filtered-cleaned_summary.html > $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf;	mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.genes.txt $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.genes.txt;mv $outfolder/snpanno/snpEff_filtered-cleaned_summary.html $outfolder/snpanno/${filename}snpEff_filtered-cleaned_summary.html;perl $reformatsnpeffvcf -i $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.vcf -o $outfolder/snpanno/${filename}output.filtered-cleaned.snpeff.sift.annotated.edited.txt\n" | tee -a  $runfile
 
-
-######
-#Step 9
-######
-
-#clean up to free disk space
-#if don't free up, it will take ~40G per sample, after that, about 4G per sample
-
-
-if [ "$keepalignment" == "F" ] && [ -f "$fastqfile" ]
-then
-	if [ "$dryrun" == "F" ];then
-		rm $outfolder/alignment/*/*.sam
-		rm $outfolder/alignment/2pass_genomeDir/SA*
-		rm $outfolder/alignment/2pass_genomeDir/Genome
-		
-		rm $outfolder/gatk3/${filename}Aligned.out_added_sorted.bam
-		rm $outfolder/gatk3/${filename}Aligned.out_dedupped.bam
-		
-	fi
-	
-	printf "rm $outfolder/alignment/*/*.sam;rm $outfolder/alignment/2pass_genomeDir/SA*;rm $outfolder/alignment/2pass_genomeDir/Genome\n" | tee -a  $runfile
-	
-fi
 
 
 printf "\n\ndone\n" | tee -a  $logfile 

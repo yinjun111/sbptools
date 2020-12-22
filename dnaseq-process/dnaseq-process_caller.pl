@@ -12,10 +12,12 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.12";
+my $version="0.13";
 
 #v0.11, fix file removing bugs
 #v0.12, add TMB summary
+#v0.13, rm temp files earlier
+
 
 my $usage="
 
@@ -393,7 +395,7 @@ foreach my $sample (sort keys %sample2fastq) {
 #----------------
 
 my %sample2workflow;
-my %tempfiles2rm;
+my %tempfiles2rm1;
 
 foreach my $sample (sort keys %sample2fastq) {
 	#my $samplefolder="$outputfolder/$sample";
@@ -434,7 +436,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		#------------------
 		$sample2workflow{$sample}.="$java -jar $trimmomatic PE ".$sample2fastq{$sample}[0]." ".$sample2fastq{$sample}[1]." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[4]." ".$sample2fastq{$sample}[3]." ".$sample2fastq{$sample}[5]." ILLUMINACLIP:/apps/Trimmomatic-0.38/adapters/TruSeq3-PE-2.fa:2:30:10 > $outputfolder/$sample/alignment/trimmomatic.log 2>&1;";
 		
-		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/*.fastq.gz"}++;
+		$tempfiles2rm1{$sample}{"$outputfolder/$sample/alignment/*.fastq.gz"}++;
 		
 		
 		#Fastqc
@@ -446,7 +448,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		$sample2workflow{$sample}.="$java -Xmx8G -jar $picard FastqToSam  FASTQ=".$sample2fastq{$sample}[2]." FASTQ2=".$sample2fastq{$sample}[3]." OUTPUT=$outputfolder/$sample/alignment/$sample\_fastq2bam.bam  READ_GROUP_NAME=ReadGroupName SAMPLE_NAME=$sample LIBRARY_NAME=LibraryName PLATFORM=illumina > $outputfolder/$sample/alignment/FastqToSam.log 2>&1;";
 
 		#temp file: $outputfolder/$sample/$sample\_fastq2bam.bam
-		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/$sample\_fastq2bam.bam"}++;
+		$tempfiles2rm1{$sample}{"$outputfolder/$sample/alignment/$sample\_fastq2bam.bam"}++;
 
 
 		#BWA alignment and convert to bam
@@ -454,7 +456,7 @@ foreach my $sample (sort keys %sample2fastq) {
 		$sample2workflow{$sample}.="$bwa mem -v 3 -t $ncpus -Y ".$tx2ref{$tx}{"fasta"}." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]." 2> $outputfolder/$sample/alignment/bwa.log | $samtools view -1 - > $outputfolder/$sample/alignment/$sample\_unmerged.bam;";
 		
 		#temp file $outputfolder/$sample/$sample\_unmerged.bam
-		$tempfiles2rm{$sample}{"$outputfolder/$sample/alignment/$sample\_unmerged.bam"}++;
+		$tempfiles2rm1{$sample}{"$outputfolder/$sample/alignment/$sample\_unmerged.bam"}++;
 		
 		$bwacommand="$bwa mem -v 3 -t $ncpus -Y ".$tx2ref{$tx}{"fasta"}." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3];
 	}
@@ -470,7 +472,7 @@ foreach my $sample (sort keys %sample2fastq) {
 	$sample2workflow{$sample}.="$java -Dsamjdk.compression_level=5 -Xmx8G -jar $picard MergeBamAlignment --VALIDATION_STRINGENCY SILENT  --EXPECTED_ORIENTATIONS FR  --ATTRIBUTES_TO_RETAIN X0  --ALIGNED_BAM $outputfolder/$sample/alignment/$sample\_unmerged.bam --UNMAPPED_BAM $outputfolder/$sample/alignment/$sample\_fastq2bam.bam  --OUTPUT $outputfolder/$sample/gatk4/$sample.aligned.unsorted.bam  --REFERENCE_SEQUENCE ".$tx2ref{$tx}{"fasta"}."  --PAIRED_RUN true  --SORT_ORDER \"unsorted\"  --IS_BISULFITE_SEQUENCE false  --ALIGNED_READS_ONLY false  --CLIP_ADAPTERS false  --MAX_RECORDS_IN_RAM 2000000  --ADD_MATE_CIGAR true  --MAX_INSERTIONS_OR_DELETIONS -1  --PRIMARY_ALIGNMENT_STRATEGY MostDistant  --PROGRAM_RECORD_ID \"bwamem\"  --PROGRAM_GROUP_VERSION \"1.7\"  --PROGRAM_GROUP_COMMAND_LINE \"$bwa mem -v 3 -t $ncpus -Y ".$tx2ref{$tx}{"fasta"}." ".$sample2fastq{$sample}[2]." ".$sample2fastq{$sample}[3]."\"  --PROGRAM_GROUP_NAME \"bwamem\"  --UNMAPPED_READ_STRATEGY COPY_TO_TAG  --ALIGNER_PROPER_PAIR_FLAGS true  --UNMAP_CONTAMINANT_READS true > $outputfolder/$sample/gatk4/mergebamalignment.log 2>&1;";
 	
 	#temp file $outputfolder/$sample/$sample.aligned.unsorted.bam
-	$tempfiles2rm{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.unsorted.bam"}++;
+	$tempfiles2rm1{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.unsorted.bam"}++;
 	
 	
 	#MarkDuplicates
@@ -478,7 +480,7 @@ foreach my $sample (sort keys %sample2fastq) {
 	$sample2workflow{$sample}.="$java -Dsamjdk.compression_level=5 -Xms4000m -jar $picard MarkDuplicates INPUT=$outputfolder/$sample/gatk4/$sample.aligned.unsorted.bam OUTPUT=$outputfolder/$sample/gatk4/$sample.aligned.unsorted.dupliates_marked.bam METRICS_FILE=$outputfolder/$sample/gatk4/$sample.dupliates_metrics.txt VALIDATION_STRINGENCY=SILENT OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500 ASSUME_SORT_ORDER=queryname CLEAR_DT=false ADD_PG_TAG_TO_READS=false > $outputfolder/$sample/gatk4/markduplicates.log 2>&1;";
 	
 	#temp file $outputfolder/$sample/gatk4/$sample.aligned.unsorted.dupliates_marked.bam
-	$tempfiles2rm{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.unsorted.dupliates_marked.bam"}++;
+	$tempfiles2rm1{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.unsorted.dupliates_marked.bam"}++;
 	
 	
 	#Sort and fix tags
@@ -487,7 +489,7 @@ foreach my $sample (sort keys %sample2fastq) {
 	
 	#temp file? $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.sorted.bam
 	#may be final file if no calibration is needed
-	$tempfiles2rm{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.sorted.bam"}++;
+	$tempfiles2rm1{$sample}{"$outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.sorted.bam"}++;
 
 	#BaseRecalibrator
 	#------------------
@@ -499,6 +501,10 @@ foreach my $sample (sort keys %sample2fastq) {
 	
 	#final bam, used for Mutect2. Only leave this file for record
 	#$outputfolder/$sample/$sample.aligned.dupliates_marked.recalibrated.bam
+	
+	#rm temporary files
+	$sample2workflow{$sample}.="rm ".join(" ",sort keys %{$tempfiles2rm1{$sample}}).";";
+	
 }
 
 
@@ -507,6 +513,7 @@ foreach my $sample (sort keys %sample2fastq) {
 #----------------
 
 my %sample2workflow2; #mutect2 for tumor only or tumor/normal
+my %tempfiles2rm2;
 
 #The second step of the workflow needs the first steps to be all finished 
 
@@ -556,14 +563,14 @@ else {
 		
 		$sample2workflow2{$sample}.="$java -jar $snpsift annotate -noInfo -v ".$tx2ref{$tx}{"knownsnp"}." $outputfolder/$sample/gatk4/$sample-filtered.vcf.gz > $outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf 2> $outputfolder/$sample/snpanno/snpsift.log;";
 		
-		$tempfiles2rm{$sample}{"$outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf"}++;
+		$tempfiles2rm2{$sample}{"$outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf"}++;
 		
 		#Manual filter, because SNPeff doesn't differentiate filtered/unfiltered
 		#filter by common snp, 
 		#------------------
 		$sample2workflow2{$sample}.="perl $rnaseq_var_filter -i $outputfolder/$sample/snpanno/${sample}.filtered.sift.annotated.vcf -d $dpfilter -a $affilter -c ".substr($tx2ref{$tx}{"gnomad_common1e4"},0,length($tx2ref{$tx}{"gnomad_common1e4"})-3)." -o $outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf 2> $outputfolder/$sample/snpanno/var_filter.log;";
 		
-		$tempfiles2rm{$sample}{"$outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf"}++;
+		$tempfiles2rm2{$sample}{"$outputfolder/$sample/snpanno/${sample}.filtered-cleaned.sift.annotated.vcf"}++;
 		
 		#SNPeff
 		#------------------
@@ -588,7 +595,7 @@ else {
 		
 		#Remove temporary files
 		#------------------
-		$sample2workflow2{$sample}.="rm ".join(" ",sort keys %{$tempfiles2rm{$sample}}).";";
+		$sample2workflow2{$sample}.="rm ".join(" ",sort keys %{$tempfiles2rm2{$sample}}).";";
 	}
 }
 
