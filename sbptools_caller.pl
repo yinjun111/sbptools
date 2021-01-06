@@ -40,7 +40,7 @@ Parameters:
     rnaseq-motif-summary  RNA-seq TFBS motif finding results summary	
     motif-finder      Transcription factor binding motif prediction
 	
-    chipseq-process   ChIP-seq QC, Align, and Peak Calling
+    chipseq-process   ChIP-seq/ATAC-Seq QC, Align, and Peak Calling
     chipseq-merge     Summarize ChIP-Seq results
     chipseq-de        Perform DE analysis for ChIP-Seq
     chipseq-summary   Summarize ChIP-seq DE results
