@@ -10,12 +10,13 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.4";
+my $version="0.5";
 
 #v0.2 now skips input samples for merging
 #v0.3, removed -v, add -r implementation for local
 #v0.31, solves screen envinroment problem
 #v0.4, firefly support
+#v0.5, add expr-qc
 
 my $usage="
 
@@ -42,7 +43,7 @@ Parameters:
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
     --anno|-a         Add annotation
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
+    --runmode|-r      Where to run the scripts, cluster, local, or none [none]
 
     Parallel computating parameters
     --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
@@ -141,7 +142,8 @@ my $parallel_job="$sbptoolsfolder/parallel-job/parallel-job_caller.pl";
 my $mergefiles="$sbptoolsfolder/mergefiles/mergefiles_caller.pl";
 my $processmergebed="$sbptoolsfolder/chipseq-merge/process_mergebed.pl";
 my $selectbed="$sbptoolsfolder/chipseq-merge/select_mergebed.pl";
-
+my $expr_qc="$sbptoolsfolder/expr-qc/expr-qc.R";
+my $reformatpeakcount="$sbptoolsfolder/chipseq-de/reformat_peak_count.pl";
 
 my $multiqc=find_program("/apps/python-3.5.2/bin/multiqc");
 my $cutadapt=find_program("/apps/python-3.5.2/bin/cutadapt");
@@ -152,6 +154,9 @@ my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
 my $samtools=find_program("/apps/samtools-1.3.1/bin/samtools");
 my $mergebed=find_program("/apps/bedtools2-2.26.0/bin/bedtools")." merge";
 my $bedtobigbed=find_program("/apps/ucsc/bedToBigBed");
+
+my $r=find_program("/apps/R-4.0.2/bin/R");
+my $rscript=find_program("/apps/R-4.0.2/bin/Rscript");
 
 #homer
 my $homer="/apps/homer/bin/";
@@ -173,6 +178,12 @@ my $promotermergedcount_raw="promoter.merged.raw.count.txt"; #count ,annotated c
 #my $samplemergedcount="promoter.merged.count.txt"; #peaks for samples from the same group are merged 
 my $allmergedcount_norm="all.reprod.peak.merged.norm.count.txt"; #peaks for all samples are merged, based on group merged
 my $allmergedcount_raw="all.reprod.peak.merged.raw.count.txt"; #peaks for all samples are merged, based on group merged
+
+my $allmergedcount_norm_reformated="all.reprod.peak.merged.norm.count.reformated.txt"; #peaks for all samples are merged, based on group merged
+my $allmergedcount_norm_reformated_anno="all.reprod.peak.merged.norm.count.reformated.anno.txt";
+
+my $promotermergedcount_norm_reformated="promoter.merged.norm.count.reformated.txt"; #count ,annotated count, 
+my $promotermergedcount_norm_reformated_anno="promoter.merged.norm.count.reformated.anno.txt"; 
 
 
 my $allmergedbed="all.reprod.peak.merged.bed";
@@ -684,6 +695,16 @@ print S2 "$bed2pos $outputfolder/$allmergedbed -o $outputfolder/$allmergedpos;";
 #annotate peaks
 print S2 "$annotatepeaks $outputfolder/",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs > $outputfolder/$allmergedcount_norm 2> $outputfolder/allmergedcount_annotatepeaks_norm_run.log;";
 print S2 "$annotatepeaks $outputfolder/",$allmergedpos," ",$tx2gv{$tx}," -gtf ",$tx2gtf{$tx}," -d $tagdirs -raw > $outputfolder/$allmergedcount_raw 2> $outputfolder/allmergedcount_annotatepeaks_raw_run.log;";
+
+#expr-qc
+
+print S2 "$reformatpeakcount -i $outputfolder/$allmergedcount_norm -o $outputfolder/$allmergedcount_norm_reformated -a $allmergedcount_norm_reformated_anno -c $newconfigfile;";
+print S2 "$rscript $expr_qc --input $outputfolder/$allmergedcount_norm_reformated --config $newconfigfile --out $outputfolder/expr-qc-all --group $group --geneanno $outputfolder/$allmergedcount_norm;";
+
+
+print S2 "$reformatpeakcount -i $outputfolder/1000u0d_longest\_$promotermergedcount_norm -o $outputfolder/1000u0d_longest\_$promotermergedcount_norm_reformated -a $outputfolder/1000u0d_longest\_$promotermergedcount_norm_reformated_anno -c $newconfigfile;";
+print S2 "$rscript $expr_qc --input $outputfolder/1000u0d_longest\_$promotermergedcount_norm_reformated --config $newconfigfile --out $outputfolder/expr-qc-promoter --group $group --geneanno $outputfolder/1000u0d_longest\_$promotermergedcount_norm;";
+
 
 print S2 "\n";
 

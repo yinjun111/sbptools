@@ -1,4 +1,6 @@
-version <- 0.2
+version <- 0.21
+
+#v0.21, add pdf for the plots
 
 # ---------------------
 # Required libraries
@@ -154,6 +156,7 @@ autoplot(expr.pca, x=1, y=2, data=pca.groups, colour="Group", label = TRUE, labe
   scale_color_manual(values = cols)
 dev.off()
 
+
 cat("Creating PCA plot PC1 vs. PC2 ...\n")
 pca_plot2 <- paste0(opt$out,"/" , opt$pn, "_PCA-1&2.png")
 CairoPNG(filename = pca_plot2,res = 300,width=2500, height=2200)
@@ -161,6 +164,14 @@ autoplot(expr.pca, x=1, y=2, data=pca.groups, colour="Group", size = 4, alpha = 
   theme_classic() + theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
   scale_color_manual(values = cols) 
 dev.off()
+
+pca_plot2.pdf <- paste0(opt$out,"/" , opt$pn, "_PCA-1&2.pdf")
+pdf(file =pca_plot2.pdf,width=7.5, height=6.6) #default 7x7 inch
+autoplot(expr.pca, x=1, y=2, data=pca.groups, colour="Group", size = 4, alpha = 0.75) + 
+  theme_classic() + theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  scale_color_manual(values = cols) 
+dev.off()
+
 
 # PC1 vs PC3
 cat("Creating PCA plot PC1 vs. PC3 with sample names ...\n")

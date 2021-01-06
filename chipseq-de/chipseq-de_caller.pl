@@ -9,12 +9,13 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #version 0.2, add de summary script
 #v0.3, add de summary by peak calling
 #v0.31, solves screen envinroment problem
 #v0.4, Firefly compatible. Versioning. R 4.0
+#v0.41, skip input for ChIP-Seq
 
 my $usage="
 
@@ -375,11 +376,7 @@ print STDERR join(",",@factors_array)," factors are identified from -f $formula\
 print LOG join(",",@factors_array)," factors are identified from -f $formula\n\n";
 		
 #----------------
-#read config file
-
-#!!!! match config file and merged count file.
-#This step may be difficult to control at chip-seq merge step
-
+#read config file, generate new config for samples subset
 
 my %sample2fastq;
 my %sample2indexname;
@@ -423,23 +420,31 @@ while(<IN>) {
 	}
 	else {
 		
-		push @configsamples,$array[0];
-		
-		#print out config file for DE
-		if($useallsamples eq "T") {
-			print OUT join("\t",@array[0,@attrselcols]),"\n";
+		#skip input rows		
+		#find input sample
+		if(defined $array[$configattrs{"INPUT"}] && length($array[$configattrs{"INPUT"}])>0 && $array[$configattrs{"INPUT"}]=~/Y/i) {
+			next;
 		}
-		else {
-			#only print out used samples
-			if($array[$configattrs{uc $factors_array[$#factors_array]}] eq $treatment || $array[$configattrs{uc $factors_array[$#factors_array]}] eq $reference) {
+		else {			
+			push @configsamples,$array[0];
+			
+			#print out config file for DE
+			if($useallsamples eq "T") {
 				print OUT join("\t",@array[0,@attrselcols]),"\n";
-				push @sampleselrows,$fileline+1; #sample row number in config is the same with sample col number in count file
+			}
+			else {
+				#only print out used samples
+				if($array[$configattrs{uc $factors_array[$#factors_array]}] eq $treatment || $array[$configattrs{uc $factors_array[$#factors_array]}] eq $reference) {
+					print OUT join("\t",@array[0,@attrselcols]),"\n";
+					push @sampleselrows,$fileline+1; #sample row number in config is the same with sample col number in count file
+				}
+			}
+			
+			foreach my $factor (@factors_array) {
+				$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
 			}
 		}
 		
-		foreach my $factor (@factors_array) {
-			$attr2name{$factor}{$array[$configattrs{uc $factor}]}++;
-		}
 	}
 	$fileline++;
 }
@@ -481,37 +486,6 @@ foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 	system("$reformatpeakcount -i $inputfolder/".$chipseq2files{$attr}{"raw"}." -o $outputfolder/".$chipseq2files{$attr}{"count"}." -a $outputfolder/".$chipseq2files{$attr}{"anno"}." -c $newconfigfile");
 	print LOG "$reformatpeakcount -i $inputfolder/".$chipseq2files{$attr}{"raw"}." -o $outputfolder/".$chipseq2files{$attr}{"count"}." -a $outputfolder/".$chipseq2files{$attr}{"anno"}." -c $newconfigfile\n";
 }
-
-open(IN,"$outputfolder/".$chipseq2files{"all"}{"count"}) || die $!;
-while(<IN>) {
-	tr/\r\n//d;
-	my @array=split/\t/;
-	my @mergesamples=@array[1..$#array];
-	
-	if(join(",",@configsamples) ne join(",",@mergesamples)) {
-		print STDERR "ERROR:Sample order different.\n";
-		print STDERR "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-		print STDERR "ERROR:Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n";
-		
-		print LOG "ERROR:Sample order different.\n";
-		print LOG "ERROR:Configure file $configfile sample order:",join(",",@configsamples),"\n";
-		print LOG "ERROR:Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n";
-
-		exit;
-	}
-	else {
-		print STDERR "Sample order matched.\n" if $verbose;
-		print STDERR "Configure file $configfile sample order:",join(",",@configsamples),"\n" if $verbose;
-		print STDERR "Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n\n" if $verbose;
-		
-		print LOG "Sample order matched.\n";
-		print LOG "Configure file $configfile sample order:",join(",",@configsamples),"\n";
-		print LOG "Merged file $outputfolder//",$chipseq2files{"all"}{"raw"}," sample order:",join(",",@mergesamples),"\n\n";			
-	}
-	last;
-}
-close IN;
-
 
 ########
 #Filter samples

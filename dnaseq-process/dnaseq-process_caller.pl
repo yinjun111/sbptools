@@ -533,10 +533,10 @@ else {
 		#for tumor only
 		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" Mutect2 -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -O $outputfolder/$sample/gatk4/$sample.vcf.gz --germline-resource ".$tx2ref{$tx}{"gnomad_common1e4"}." --f1r2-tar-gz $outputfolder/$sample/gatk4/f1r2.tar.gz > $outputfolder/$sample/gatk4/Mutect2.log 2>&1;";
 		
-		#GetPileupSummaries #variants for contamination/common snp needed
+		#GetPileupSummaries #variants for contamination/common snp needed #minimum 30g memory ...
 		#------------------
 		
-		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms4g\" GetPileupSummaries -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -V ".$tx2ref{$tx}{"gnomad_common1e4"}." -L ".$tx2ref{$tx}{"gnomad_common1e4"}." -O $outputfolder/$sample/gatk4/tumor-pileups.table > $outputfolder/$sample/gatk4/GetPileupSummaries.log 2>&1;";
+		$sample2workflow2{$sample}.="$gatk --java-options \"-Xms40g\" GetPileupSummaries -R ".$tx2ref{$tx}{"fasta"}." -I $outputfolder/$sample/gatk4/$sample.aligned.dupliates_marked.recalibrated.bam -V ".$tx2ref{$tx}{"gnomad_common1e4"}." -L ".$tx2ref{$tx}{"gnomad_common1e4"}." -O $outputfolder/$sample/gatk4/tumor-pileups.table > $outputfolder/$sample/gatk4/GetPileupSummaries.log 2>&1;";
 
 		
 		#Learn Read Orientation Model

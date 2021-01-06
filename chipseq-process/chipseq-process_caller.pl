@@ -4,9 +4,6 @@ use Getopt::Long;
 use Cwd qw(abs_path);
 use File::Basename qw(basename dirname);
 
-#CutAdapt+FASTQC+RSEM+STAR
-
-
 ########
 #Interface
 ########
@@ -24,9 +21,9 @@ my $version="0.4";
 
 my $usage="
 
-chipseq-processs
+chipseq-process
 version: $version
-Usage: sbptools chipseq-processs [parameters]
+Usage: sbptools chipseq-process [parameters]
 
 Description: 
 
@@ -53,7 +50,7 @@ Parameters:
     --ncpus           No. of cpus for each task [4]
     --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
-    --runmode|-r      Where to run the scripts, local, server or none [none]
+    --runmode|-r      Where to run the scripts, cluster, local, or none [none]
 	
 	
 ";
@@ -103,9 +100,11 @@ GetOptions(
 	"task=s" => \$task,
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
+
+	"dev" => \$dev,			
 	
 	"type=s" => \$type,
-	"dev" => \$dev,			
+
 	"verbose|v" => \$verbose,
 );
 
@@ -146,8 +145,9 @@ my $rsem=find_program("/apps/RSEM-1.3.1/rsem-calculate-expression");
 my $star=find_program("/apps/STAR-master/bin/Linux_x86_64/STAR");
 my $bamcoverage=find_program("/apps/python-3.5.2/bin/bamCoverage");
 my $samtools=find_program("/apps/samtools-1.3.1/bin/samtools");
+my $bedtobigbed=find_program("/apps/ucsc/bedToBigBed");
 
-
+#bedGraphToBigWig needs to be in PATH
 
 #homer
 my $homer="/apps/homer/bin/";
@@ -157,9 +157,6 @@ my $annotatepeaks="$homer/annotatePeaks.pl";
 my $findpeaks="$homer/findPeaks";
 my $makeucscfile="$homer/makeUCSCfile";
 my $pos2bed="$homer/pos2bed.pl";
-
-#UCSC
-my $bedtobigbed="/apps/ucsc/bedToBigBed";
 
 
 #####
@@ -184,11 +181,11 @@ if(!-e $scriptfolder) {
 }
 
 
-my $logfile="$outputfolder/chipseq-processs_run.log";
-my $newconfigfile="$outputfolder/chipseq-processs_config.txt";
+my $logfile="$outputfolder/chipseq-process_run.log";
+my $newconfigfile="$outputfolder/chipseq-process_config.txt";
 
-my $scriptfile1="$scriptfolder/chipseq-processs_run1.sh";
-my $scriptfile2="$scriptfolder/chipseq-processs_run2.sh";
+my $scriptfile1="$scriptfolder/chipseq-process_run1.sh";
+my $scriptfile2="$scriptfolder/chipseq-process_run2.sh";
 
 
 my $scriptlocalrun="$outputfolder/chipseq-process_local_submission.sh";
@@ -257,8 +254,8 @@ elsif($tx=~/Mouse.B38/) {
 #Process
 ########
 
-print STDERR "\nsbptools chipseq-processs $version running ...\n\n" if $verbose;
-print LOG "\nsbptools chipseq-processs $version running ...\n\n";
+print STDERR "\nsbptools chipseq-process $version running ...\n\n" if $verbose;
+print LOG "\nsbptools chipseq-process $version running ...\n\n";
 
 
 
