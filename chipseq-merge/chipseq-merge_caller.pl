@@ -284,8 +284,8 @@ my %tx2promoter=(
 );
 
 my %tx2gtf=(
-	"Human.B38.Ensembl84"=>"/home/jyin/Data/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
-	"Mouse.B38.Ensembl84"=>"/home/jyin/Data/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
+	"Human.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Human/hg38/Homo_sapiens.GRCh38.84_ucsc.gtf",
+	"Mouse.B38.Ensembl84"=>"/data/jyin/Databases/Genomes/Mouse/mm10/Mus_musculus.GRCm38.84_ucsc.gtf",
 );
 
 
