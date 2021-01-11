@@ -498,6 +498,7 @@ if($useallsamples eq "T") {
 	
 	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 		system("cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"});
+		print LOG "cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
 	}
 }
 else {
@@ -510,6 +511,7 @@ else {
 
 	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 		system("cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"});
+		print LOG "cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
 	}
 }
 

@@ -9,14 +9,14 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.4";
+my $version="0.41";
 
 #v0.1 add --atacseq for cutadapt 
 #v0.2 add TF support
 #v0.3 add runmode
 #v0.31, solves screen envinroment problem
 #v0.4, firefly, v0.6 comp, R ...
-
+#v0.41, stop producing peaks for input
 
 
 my $usage="
@@ -611,13 +611,16 @@ foreach my $sample (sort keys %sample2fastq) {
 
 	
 		$sample2workflow{$sample}.="$annotatepeaks $outputfolder/$sample/$sample\_Peaks.txt $genomeversion -gtf ".$tx2ref{$tx}{"gtf"}." -ann ".$tx2ref{$tx}{"homeranno"}." > $outputfolder/$sample/$sample\_Peaks_Anno.txt 2> $outputfolder/$sample/$sample\_annotatepeaks.log;";
+
+
+		#make bed file
+		$sample2workflow{$sample}.="$pos2bed $outputfolder/$sample/$sample\_Peaks.txt > $outputfolder/$sample/$sample\_Peaks.bed;";
+
+		#bedtobigbed
+		$sample2workflow{$sample}.="cat $outputfolder/$sample/$sample\_Peaks.bed | grep -v \"#\" | sort -k1,1 -k2,2n > $outputfolder/$sample/$sample\_Peaks_sorted.bed;$bedtobigbed $outputfolder/$sample/$sample\_Peaks_sorted.bed ".$tx2ref{$tx}{"chrsize"}." $outputfolder/$sample/$sample\_Peaks_sorted.bb;";
+
 	}	
 	
-	#make bed file
-	$sample2workflow{$sample}.="$pos2bed $outputfolder/$sample/$sample\_Peaks.txt > $outputfolder/$sample/$sample\_Peaks.bed;";
-	
-	#bedtobigbed
-	$sample2workflow{$sample}.="cat $outputfolder/$sample/$sample\_Peaks.bed | grep -v \"#\" | sort -k1,1 -k2,2n > $outputfolder/$sample/$sample\_Peaks_sorted.bed;$bedtobigbed $outputfolder/$sample/$sample\_Peaks_sorted.bed ".$tx2ref{$tx}{"chrsize"}." $outputfolder/$sample/$sample\_Peaks_sorted.bb;";
 	
 	#makeUCSCfile
 	$sample2workflow{$sample}.="$makeucscfile $outputfolder/$sample/$sample\_TagDir -o $outputfolder/$sample/$sample.bw -bigWig ".$tx2ref{$tx}{"chrsize"}." > $outputfolder/$sample/$sample\_trackinfo.txt;";
