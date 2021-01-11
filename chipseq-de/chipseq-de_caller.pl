@@ -15,7 +15,7 @@ my $version="0.41";
 #v0.3, add de summary by peak calling
 #v0.31, solves screen envinroment problem
 #v0.4, Firefly compatible. Versioning. R 4.0
-#v0.41, skip input for ChIP-Seq
+#v0.41, skip input for ChIP-Seq. New inputfile for DE
 
 my $usage="
 
@@ -421,7 +421,9 @@ while(<IN>) {
 	else {
 		
 		#skip input rows		
+
 		#find input sample
+		#there should not be any INPUT in the config file
 		if(defined $array[$configattrs{"INPUT"}] && length($array[$configattrs{"INPUT"}])>0 && $array[$configattrs{"INPUT"}]=~/Y/i) {
 			next;
 		}
@@ -475,8 +477,15 @@ else {
 }
 
 
+#double check order of treatment and ref
+
+
+
+
 #----------------
 #check input folder
+
+#count and newconfig are in the same sample order after reformatpeakcount
 
 #convert files
 foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
@@ -491,29 +500,33 @@ foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 #Filter samples
 ########
 
-if($useallsamples eq "T") {
-	#copy counting files to de folder
-	print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
-	print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
-	
-	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
-		system("cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"});
-		print LOG "cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
-	}
-}
-else {
-	#copy counting files to de folder, using selected samples
-	print STDERR "--useallsamples F defined. Only selected samples are used for DE test.\n" if $verbose;
-	print STDERR "Sample columns ".join(",",@sampleselrows)." are used.\n\n" if $verbose;
-	
-	print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
-	print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
+#this step is unneccesary. 
+#$outputfolder/".$chipseq2files{$attr}{"count"} should be the file needed for DE
 
-	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
-		system("cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"});
-		print LOG "cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
-	}
-}
+
+#if($useallsamples eq "T") {
+#	#copy counting files to de folder
+#	print STDERR "--useallsamples T defined. All samples are used for DE test.\n\n" if $verbose;
+#	print LOG "--useallsamples T defined. All samples are used for DE test.\n\n";
+	
+#	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+#		system("cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"});
+#		print LOG "cp $outputfolder/".$chipseq2files{$attr}{"count"}." $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
+#	}
+#}
+#else {
+#	#copy counting files to de folder, using selected samples
+#	print STDERR "--useallsamples F defined. Only selected samples are used for DE test.\n" if $verbose;
+#	print STDERR "Sample columns ".join(",",@sampleselrows)." are used.\n\n" if $verbose;
+	
+#	print LOG "--useallsamples F defined. Only selected samples are used for DE test.\n";
+#	print LOG "Sample columns ".join(",",@sampleselrows)." are used.\n\n";
+
+#	foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
+#		system("cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"});
+#		print LOG "cut -f 1,".join(",",@sampleselrows)." $outputfolder/".$chipseq2files{$attr}{"count"}." > $outputfolder/".$chipseq2files{$attr}{"selected"},"\n";
+#	}
+#}
 
 ########
 #Print out commands, for local and server run
@@ -530,7 +543,7 @@ open(S1,">$scriptfile1") || die "Error writing $scriptfile1. $!";
 foreach my $attr ("all","1000u0d_longest","1000u0d_all") {
 	
 	#DE by Signal ...
-	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"selected"}," -c $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
+	print S1 "$rscript $descript -i $outputfolder/",$chipseq2files{$attr}{"count"}," -c $newconfigfile -o $outputfolder/",$chipseq2files{$attr}{"result"}," -f \"$formula\" -t $treatment -r $reference --fccutoff $fccutoff --qcutoff $qcutoff --qmethod $qmethod --pmethod $pmethod --filter $filter;";
 
 
 	#summary and annotation 
