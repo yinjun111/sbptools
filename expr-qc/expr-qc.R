@@ -78,15 +78,19 @@ expr[is.na(expr)] <- 0
 config <- read.delim(opt$config, sep = "\t", header = T)
 geneanno <- read.delim(opt$geneanno, sep = "\t", header = T, stringsAsFactors = F)
 
+#modified to uppercase for config column names 
+colnames(config)<-toupper(colnames(config))
+opt$group<-toupper(opt$group)
+
 # ---------------------------------
 # Define groups, colors, Log2 norm
 # ---------------------------------
 # Define group information for samples
-Group <- factor(config[,opt$group][match(colnames(expr), config$Sample)])
+Group <- factor(config[,opt$group][match(colnames(expr), config$SAMPLE)])
 pca.groups <- data.frame(Group)
 
 cat("Following samples found:\n")
-cat(do.call(paste, c(as.list(config$Sample), sep = ", ")))
+cat(do.call(paste, c(as.list(config$SAMPLE), sep = ", ")))
 cat("\n\n")
 cat("Following groups found:\n")
 cat(do.call(paste, c(as.list(levels(Group)), sep = ", ")))
@@ -119,12 +123,12 @@ dev.off()
 cat("Creating boxplots for all samples ...\n")
 # Melt expr data frame and add group information
 expr.melt <- melt(expr.pca)
-expr.melt$Group <- config[, opt$group][(match(expr.melt$variable, config[, "Sample"]))]
+expr.melt$Group <- config[, opt$group][(match(expr.melt$variable, config[, "SAMPLE"]))]
 
 p <- ggplot(expr.melt, aes(x=variable, y=value)) + 
   geom_boxplot(aes(fill=Group, alpha=0.75), outlier.shape=NA)  + theme_classic() + 
   theme(panel.border = element_rect(colour = "black", fill=NA, size=1))+
-  scale_fill_manual(values=cols) + xlab("Sample") + ylab("Expression level (Log2)") + labs(title="") +
+  scale_fill_manual(values=cols) + xlab("SAMPLE") + ylab("Expression level (Log2)") + labs(title="") +
   scale_alpha(guide = 'none') + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 box_plot <- paste0(opt$out,"/" , opt$pn, "_sample-boxplots_", ".png")
