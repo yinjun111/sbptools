@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.53";
+my $version="0.54";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -25,6 +25,7 @@ my $version="0.53";
 #v0.51, support different versions
 #v0.52, correct bamcoverage bug
 #v0.53, rm temporary files. only keep genome bam
+#v0.54, option to keep fastq
 
 my $usage="
 
@@ -52,6 +53,7 @@ Parameters:
     --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
 
     --bamcoverage     Produce bw file for bam files [F]
+    --keepfastq       Keep Cutadapt trimmed Fastq [F]	
 	
     --runmode|-r      Where to run the scripts, local, cluster or none [none]
                             local is to run locally using \"parallel\", recommended for Falco
@@ -87,6 +89,7 @@ my $tx;
 my $task;
 my $ncpus=4;
 my $runbamcoverage="F";
+my $keepfastq="F";
 my $mem="40gb";
 my $runmode="none";
 
@@ -101,6 +104,7 @@ GetOptions(
 	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
 	"bamcoverage=s" => \$runbamcoverage,	
+	"keepfastq=s" => \$keepfastq,	
 	"runmode|r=s" => \$runmode,		
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		
@@ -415,8 +419,10 @@ if(defined $configattrs{"FASTQ2"}) {
 		
 		$sample2workflow{$sample}.="$cutadapt -j 4 -m 20 --interleaved -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT $fastq1 $fastq2 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"A{100}\" -A \"A{100}\" - 2>>$cutadaptlog | $cutadapt --interleaved -j 4 -m 20 -a \"T{100}\" -A \"T{100}\" - -o $fastq1trim -p $fastq2trim 1>>$cutadaptlog;";
 		
-		$tempfiles2rm{$sample}{$fastq1trim}++;
-		$tempfiles2rm{$sample}{$fastq2trim}++;
+		if($keepfastq eq "F") {
+			$tempfiles2rm{$sample}{$fastq1trim}++;
+			$tempfiles2rm{$sample}{$fastq2trim}++;
+		}
 		
 	}
 }
@@ -445,7 +451,9 @@ else {
 		
 		$sample2workflow{$sample}.="$cutadapt -j 4 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC $fastq1 2>>$cutadaptlog | $cutadapt -j 4 -a \"A{100}\" - 2>>$cutadaptlog | $cutadapt -j 4 -m 20 -a \"T{100}\" - -o $fastq1trim 1>>$cutadaptlog;";
 		
-		$tempfiles2rm{$sample}{$fastq1trim}++;
+		if($keepfastq eq "F") {
+			$tempfiles2rm{$sample}{$fastq1trim}++;
+		}
 	}
 }
 		
