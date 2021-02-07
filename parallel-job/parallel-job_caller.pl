@@ -12,6 +12,7 @@ use List::Util qw(min);
 
 #0.11 change procs to ppn, procs is still usable but hidden
 #0.12 add --asis to submit the task directly
+#0.13 add note for --nodes
 
 ########
 #Prerequisites
@@ -25,7 +26,7 @@ use List::Util qw(min);
 ########
 
 
-my $version="0.12";
+my $version="0.13";
 
 
 my $usage="
@@ -54,14 +55,13 @@ Parameters:
     For each task, there are two ways of specifying the computing resource,
       but you can't mix --nodes and --ncpus together.
 	A) by specifying number of nodes and process
-    --nodes           No. of nodes for each task
-    #--procs           No. of processors for each task
+    --nodes           The value can be a) No. of nodes for each task, e.g. 1
+                                       b) Name of the node, e.g. n001.cluster.com                        
     --ppn             No. of processes for each task	
 	B) by specifying the total number of cpus
     --ncpus           No. of cpus for each task for tasks can't use multiple nodes
 
     --mem|-m          Memory usage for each process, e.g. 10gb
-
 
     --tandem|--td     Only used when multiple task files in input
                            Each task file needs to be successfully ran before the next one can be started
@@ -162,6 +162,14 @@ print STDERR "\nWelcome $userattrs[6]($user) from $groupattrs[0] to Firefly!\n";
 
 #either --nodes and --procs, or --ncpus, but not both
 #this step is handled by PBS
+
+
+if(defined $ncpus && length($ncpus)>0) {
+	if( (defined $nodes && length($nodes)>0) || (defined $ppn && length($ppn)>0)) {
+		print STDERR "ERROR: Either --nodes/--ppn or --ncpus can be defined, but not both.\n";
+		exit;
+	}
+}
 
 
 ######
@@ -447,11 +455,17 @@ sub write_qj_task {
 
 
 #computing resource setting
-if(defined $params->{"nodes"}) {
-	if(defined $params->{"ppn"}) {
+
+if(defined $params->{"ppn"}) {
+	if(defined $params->{"nodes"}) {
 		print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},":ppn=",$params->{"ppn"},"\n";
 	}
 	else {
+		print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=1:ppn=",$params->{"ppn"},"\n";
+	}
+}
+else {
+	if(defined $params->{"nodes"}) {
 		print OUT2 "## Parallel environment to defind # of cores\n#PBS -l nodes=",$params->{"nodes"},"\n";
 	}
 }

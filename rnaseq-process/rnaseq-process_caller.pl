@@ -12,7 +12,7 @@ use File::Basename qw(basename dirname);
 ########
 
 
-my $version="0.54";
+my $version="0.55";
 
 #0.2b change ensembl to UCSC format
 #0.2c add bw generation
@@ -26,6 +26,7 @@ my $version="0.54";
 #v0.52, correct bamcoverage bug
 #v0.53, rm temporary files. only keep genome bam
 #v0.54, option to keep fastq
+#v0.55, add --nodes/--ppn for Firefly
 
 my $usage="
 
@@ -48,10 +49,6 @@ Parameters:
     --tx|-t           Transcriptome
                         Current support Human.B38.Ensembl84, Mouse.B38.Ensembl84
 
-    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
-    --ncpus           No. of cpus for each task [4]
-    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
-
     --bamcoverage     Produce bw file for bam files [F]
     --keepfastq       Keep Cutadapt trimmed Fastq [F]	
 	
@@ -61,6 +58,24 @@ Parameters:
                             none is to generate scripts only, after that,
                                    you can use \"sh rnaseq-merge_local_submission.sh\" to run locally, or
                                    you can use \"sh rnaseq-merge_cluster_submission.sh\" to submit job to PBS
+
+    #Parameters for PBS
+
+    --task            Number of tasks to be paralleled. By default 4 tasks for local mode, 8 tasks for cluster mode.
+
+    --mem|-m          Memory usage for each process, e.g. 100mb, 100gb [40gb]
+	
+    For each task, there are two ways of specifying the computing resource,
+      but you can't mix --nodes and --ncpus together.
+	A) by specifying number of nodes and process
+    --nodes           The value can be A) No. of nodes for each task
+                                       B) Name of the node, e.g. n001.cluster.com                        
+    --ppn             No. of processes for each task	
+	
+	B) by specifying the total number of cpus (default)
+    --ncpus           No. of cpus for each task for tasks can't use multiple nodes
+                           Default for rnaseq-process[4]
+						   
 
 								   
 ";
@@ -86,12 +101,14 @@ my $configfile;
 my $outputfolder;
 my $verbose=1;
 my $tx;
-my $task;
-my $ncpus=4;
 my $runbamcoverage="F";
 my $keepfastq="F";
 my $mem="40gb";
 my $runmode="none";
+my $task;
+my $ncpus=4;
+my $ppn;
+my $nodes;
 
 my $dev=0; #developmental version
 
@@ -100,12 +117,14 @@ GetOptions(
 	"config|c=s" => \$configfile,
 	"output|o=s" => \$outputfolder,
 	"tx|t=s" => \$tx,
-	"task=s" => \$task,
-	"ncpus=s" => \$ncpus,
 	"mem=s" => \$mem,
 	"bamcoverage=s" => \$runbamcoverage,	
 	"keepfastq=s" => \$keepfastq,	
 	"runmode|r=s" => \$runmode,		
+	"task=s" => \$task,
+	"ncpus=s" => \$ncpus,
+	"ppn=s" => \$ppn,
+	"nodes=s" => \$nodes,
 	"verbose|v" => \$verbose,
 	"dev" => \$dev,		
 );
@@ -613,11 +632,26 @@ close LOUT;
 
 #print out command for cluster parallel runs
 
-my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --ncpus $ncpus --env"; #changed here for none version
+my $clustercommand="perl $parallel_job -i ".join(",", @scripts_all)." -o $scriptfolder -n ".join(",",@script_names)." --tandem -t $task --env"; #changed here for none version
+
+
+if(defined $ppn && length($ppn)>0) {
+	if(defined $nodes && length($nodes)>0) {
+		$clustercommand.=" --nodes $nodes --ppn $ppn";		
+	}
+	else {
+		$clustercommand.=" --nodes 1 --ppn $ppn";	
+	}
+}
+else {
+	$clustercommand.=" --ncpus $ncpus";	
+}
 
 if(defined $mem && length($mem)>0) {
 	$clustercommand.=" -m $mem";	
 }
+
+
 
 print SOUT "sh $outputfolder/scripts/parallel-job_submit.sh\n"; #submit step
 close SOUT;
