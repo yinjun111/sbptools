@@ -13,6 +13,7 @@ use List::Util qw(min);
 #0.11 change procs to ppn, procs is still usable but hidden
 #0.12 add --asis to submit the task directly
 #0.13 add note for --nodes
+#0.14 support job submission assigning to multiple nodes
 
 ########
 #Prerequisites
@@ -33,6 +34,7 @@ my $usage="
 
 parallel-job
 version: $version
+
 Usage: sbptools parallel-job -i yourscripts.sh -n yourscripts -o jobsubmissionfolder -t 5 --nodes 1 --procs 4 -m 10gb -r
 Or simpley type: sbptools parallel-job -i yourscripts.sh -r
 
@@ -56,7 +58,10 @@ Parameters:
       but you can't mix --nodes and --ncpus together.
 	A) by specifying number of nodes and process
     --nodes           The value can be a) No. of nodes for each task, e.g. 1
-                                       b) Name of the node, e.g. n001.cluster.com                        
+                                       b) Name of the node(s), 
+                                          e.g. n001.cluster.com to submit to n001 only
+                                          e.g. n002.cluster.com+n003.cluster.com
+                                                 to submit to n002 and n003 				  
     --ppn             No. of processes for each task	
 	B) by specifying the total number of cpus
     --ncpus           No. of cpus for each task for tasks can't use multiple nodes
@@ -176,6 +181,12 @@ if(defined $ncpus && length($ncpus)>0) {
 #Process input file
 ######
 
+my @nodes_used;
+
+if(defined $nodes && length($nodes)>0) {
+	@nodes_used=split("\\+",$nodes);
+}
+
 #read infiles and folders
 my @infiles=split(",",$infiles);
 my @infile_abspaths=map {abs_path($_)} @infiles;
@@ -276,7 +287,7 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	unless(-e $current_so) {
 		system("mkdir $current_so");
 	}
-	
+			
 	#params for this job
 	my $job_params={
 		#so,wo,eo,oo,mem,que,procs,env
@@ -344,6 +355,27 @@ for(my $filenum=0;$filenum<@infiles;$filenum++) {
 	for(my $num=0;$num<@split_command_lines;$num++) {
 		#qj file name
 		my $commandline_script="$qjname\_".form_num($num+1,scalar(@split_command_lines)).".sh";
+
+
+		#assign one node a time for each task to maximize job distribution
+		#number will be treated as one node
+		my $node_selected;
+		
+		if(@nodes_used==1) {
+			$node_selected=$nodes_used[0];
+		}
+		elsif(@nodes_used>1) {
+			$node_selected=$nodes_used[$num%scalar(@nodes_used)]; #assign one node a time
+		}
+		else {
+			$node_selected=$nodes;
+		}
+		
+		#print STDERR $num,"\t",$node_selected,"\n";
+
+		#reassign node attr
+		$job_params->{"nodes"}=$node_selected;
+
 		
 		write_qj_task($split_command_lines[$num],$commandline_script,$job_params);
 		
